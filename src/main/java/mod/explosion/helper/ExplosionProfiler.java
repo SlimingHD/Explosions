@@ -1,0 +1,124 @@
+package mod.explosion.helper;
+
+import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.List;
+import java.util.function.Function;
+
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+
+public class ExplosionProfiler {
+	
+	private final ServerLevel level;
+	
+	private final List<Profile> profiles = new ArrayList<Profile>();
+	
+	private String titleTranslationKey = "explosions.benchmarking.explosion_title";
+	
+	public ExplosionProfiler(ServerLevel level) {
+		this.level = level;
+	}
+	
+	public void setTitle(String titleTranslationKey) {
+		this.titleTranslationKey = titleTranslationKey;
+	}
+	
+	public Profile createProfile(String messageTranslationKey) {
+		Profile profile = new Profile(messageTranslationKey);
+		profiles.add(profile);
+		return profile;
+	}
+	
+	public Profile getProfile(int index) {
+		return profiles.get(index);
+	}
+	
+	public void printResults() {
+		MutableComponent message = Component.translatable(titleTranslationKey).append(":").withStyle(ChatFormatting.AQUA);
+		for (Profile profile : profiles) {
+			double time = (profile.stopTime - profile.startTime) / 1000d;
+			Object[] args = new Object[1 + profile.counters.size()];
+			args[0] = Component.literal(String.format("%1$.2f", time)).withStyle(ChatFormatting.GOLD);
+			for (int i = 0; i < profile.counters.size(); i++) {
+				Counter counter = profile.counters.get(i);
+				args[i] = Component.literal(String.format(counter.format, counter.getPrintValue())).withStyle(ChatFormatting.GOLD);
+			}
+			message.append("\n  ").append(Component.translatable(profile.messageTranslationKey, args).withStyle(ChatFormatting.WHITE));
+
+		}
+		for (ServerPlayer player : level.players()) {
+			player.sendSystemMessage(message, false);
+		}
+	}
+	
+	public static class Profile {
+		
+		private final List<Counter> counters = new ArrayList<Counter>();
+		private final String messageTranslationKey;
+		
+		private long startTime;
+		private long stopTime;
+		
+		public Profile(String messageTranslationKey) {
+			this.messageTranslationKey = messageTranslationKey;
+		}
+		
+		public void startBenchmark() {
+			startTime = System.currentTimeMillis();
+		}
+		
+		public void stopBenchmark() {
+			stopTime = System.currentTimeMillis();
+		}
+		
+		public Counter addCounter(String format, int initialValue) {
+			Counter counter = new Counter(format, initialValue, v -> v);
+			counters.add(counter);
+			return counter;
+		}
+
+		public Counter addCounter(String format, int initialValue, Function<Integer, Integer> printValueFunction) {
+			Counter counter = new Counter(format, initialValue, printValueFunction);
+			counters.add(counter);
+			return counter;
+		}
+	}
+	
+	public static class Counter {
+
+		private final String format;
+		private final Function<Integer, Integer> printValueFunction;
+		
+		private int value;
+		
+		public Counter(String format, int value, Function<Integer, Integer> printValueFunction) {
+			this.format = format;
+			this.printValueFunction = printValueFunction;
+			this.value = value;
+		}
+		
+		private int getPrintValue() {
+			return printValueFunction.apply(value);
+		}
+		
+		public void increment(int amount) {
+			value += amount;
+		}
+		
+		public void increment(BitSet amount) {
+			value += amount.cardinality();
+		}
+		
+		public void decrement(int amount) {
+			value -= amount;
+		}
+		
+		public void decrement(BitSet amount) {
+			value -= amount.cardinality();
+		}
+	}
+}
