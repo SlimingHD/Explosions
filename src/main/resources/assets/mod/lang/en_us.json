@@ -1,0 +1,21 @@
+{
+	"explosions.benchmark.total_time": "Total time spent for exploding %2$s blocks: %1$ss",
+	"explosions.benchmark.ray_tracing_time": "Time spent for ray-tracing %2$s rays: %1$ss",
+	"explosions.benchmark.section_accesses": "Level section access count: %2$s",
+	"explosions.benchmark.heap_allocations": "Estimated heap allocations: %2$sMB, Peak: %3$sMB",
+	"explosions.benchmark.ray_creation_time": "Time for creation of rays: %1$ss",
+	"explosions.benchmark.cpu": "CPU tasks used: %2$s",
+	
+	"explosions.benchmark.half_cube": "Half Cube Simple Explosion",
+	"explosions.benchmark.cube": "Cube Simple Explosion",
+	"explosions.benchmark.sphere": "Sphere Simple Explosion",
+	"explosions.benchmark.improved_explosion": "Improved Explosion",
+	"explosions.benchmark.improved_explosion_ray_reduced": "Improved Explosion Ray Reduced",
+	"explosions.benchmark.improved_explosion_dda": "Improved Explosion DDA",
+	"explosions.benchmark.map_unwrapped_explosion": "Map Unwrapped Explosion",
+	"explosions.benchmark.improved_explosion_multithreaded": "Improved Explosion Multithreaded",
+	"explosions.benchmark.improved_explosion_ray_reduced_multithreaded": "Improved Explosion Ray Reduced Multithreaded",
+	"explosions.benchmark.improved_explosion_dda_multithreaded": "Improved Explosion DDA Multithreaded",
+	"explosions.benchmark.map_unwrapped_explosion_multithreaded": "Map Unwrapped Explosion Multithreaded",
+	"explosions.benchmark.semi_unwrapped_explosion_multithreaded": "Semi Unwrapped Explosion Multithreaded"
+}

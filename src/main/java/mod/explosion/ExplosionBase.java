@@ -32,7 +32,7 @@ public abstract class ExplosionBase {
 	protected final RandomSource random;
 	public final ExplosionProfiler profiler;
 	
-	private Runnable finishWork;
+	public Runnable finishWork;
 	
 	public ExplosionBase(ServerLevel level) {
 		this.level = level;
@@ -57,12 +57,51 @@ public abstract class ExplosionBase {
 			BitSet editedBlocks = editedSections.computeIfAbsent(sectionPos, l -> new BitSet(4096));
 			int blockIndex = ((pos.getX() & 15) << 8) | ((pos.getY() & 15) << 4) | (pos.getZ() & 15);
 			editedBlocks.set(blockIndex);
-			if (editedBlocks.nextClearBit(blockIndex) >= 4096) {
+			if (editedBlocks.nextClearBit(0) >= 4096) {
 				fullSections.add(sectionPos);
 				editedSections.remove(sectionPos);
 			}
 		}
 		finishExplosion(editedSections, fullSections);
+	}
+	
+	public void finishExplosion(BitSet[] editedSections, BitSet fullSections, SectionPos center, int maxReachSection, int maxReachSectionY) {
+		Map<Long, BitSet> editedSectionsMap = new Long2ObjectOpenHashMap<BitSet>();
+		Set<Long> fullSectionsMap = new LongOpenHashSet();
+		for (int i = 0; i < editedSections.length; i++) {
+			BitSet editedBlocks = editedSections[i];
+			if (editedBlocks != null) {
+				int x = i / (maxReachSection * maxReachSectionY);
+				int rem = i % (maxReachSection * maxReachSectionY);
+				int y = rem / maxReachSection;
+				int z = rem % maxReachSection;
+				
+				x -= maxReachSection / 2;
+				y -= maxReachSectionY / 2;
+				z -= maxReachSection / 2;
+				if (center.y() + y < level.getMinSection() || center.y() + y >= level.getMaxSection()) {
+					System.out.println("DU SPAST2");
+				}
+				editedSectionsMap.put(SectionPos.asLong(center.x() + x, center.y() + y, center.z() + z), editedBlocks);
+			}
+		}
+		for (int i = 0; i < fullSections.size(); i++) {
+			if (fullSections.get(i)) {
+				int x = i / (maxReachSection * maxReachSectionY);
+				int rem = i % (maxReachSection * maxReachSectionY);
+				int y = rem / maxReachSection;
+				int z = rem % maxReachSection;
+				
+				x -= maxReachSection / 2;
+				y -= maxReachSectionY / 2;
+				z -= maxReachSection / 2;
+				if (center.y() + y < level.getMinSection() || center.y() + y >= level.getMaxSection()) {
+					System.out.println("DU SPAST");
+				}
+				fullSectionsMap.add(SectionPos.asLong(center.x() + x, center.y() + y, center.z() + z));
+			}
+		}
+		finishExplosion(editedSectionsMap, fullSectionsMap);
 	}
 	
 	public void finishExplosion(Map<Long, BitSet> editedSections, Set<Long> fullSections) {
@@ -115,8 +154,5 @@ public abstract class ExplosionBase {
 		LightUpdateHelper.updateIndirectSkyLight((ServerLevel)level, chunks, dataLayerCache);
 		
 		level.save(null, false, false);
-		if (finishWork != null) {
-			finishWork.run();
-		}
 	}
 }

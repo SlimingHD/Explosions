@@ -8,23 +8,24 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.joml.Vector3f;
-
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import mod.explosion.helper.ExplosionProfiler.Counter;
 import mod.explosion.helper.ExplosionProfiler.Profile;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Vec3i;
 
-public final class ExplosionThread extends Thread {
+public final class ImprovedExplosionThread extends Thread {
 
 	private static final int minVectorsPerThread = 25000;
-	private static final ForkJoinPool pool = new ForkJoinPool();
+	protected static final ForkJoinPool pool = new ForkJoinPool();
 	
-	private final ImprovedExplosion explosion;
-	private final List<Vector3f> vectors;
-	private final Vec3 pos;
+	private final ExplosionBase explosion;
+	private final List<Vec3i> rays;
+	private final BlockPos pos;
 	private final int radius;
 	private final float randomVectorLength;
+	private final boolean reducedRays;
+	private final boolean dda;
 	
 	public final Profile totalTime;
 	public final Counter blockCount;
@@ -32,6 +33,8 @@ public final class ExplosionThread extends Thread {
 	public final Counter sectionAccessCount;
 	public final Counter heapAllocationMB;
 	public final Counter requiredHeapAllocationMB;
+	public final Profile cpu;
+	public final Counter cpuTaskCount;
 	
 	final Set<Long> emptySections = ConcurrentHashMap.newKeySet();
 	final Set<Long> fullSections = ConcurrentHashMap.newKeySet();
@@ -45,27 +48,40 @@ public final class ExplosionThread extends Thread {
 	
 	int taskCount = 0;
 	
-	ExplosionThread(ImprovedExplosion explosion, List<Vector3f> vectors, Vec3 pos, int radius, float randomVectorLength) {
+	ImprovedExplosionThread(ExplosionBase explosion, List<Vec3i> rays, BlockPos pos, int radius, float randomVectorLength, boolean reducedRays, boolean dda) {
 		this.explosion = explosion;
-		this.vectors = vectors;
+		this.rays = rays;
 		this.pos = pos;
 		this.radius = radius;
 		this.randomVectorLength = randomVectorLength;
+		this.reducedRays = reducedRays;
+		this.dda = dda;
+		
 		totalTime = explosion.profiler.getProfile(0);
-		blockCount = totalTime.addCounter("%1$i", 0);
+		blockCount = totalTime.addCounter(0);
 		rayTracingTime = explosion.profiler.getProfile(1);
 		Profile sectionAccesses = explosion.profiler.createProfile("explosions.benchmark.section_accesses");
-		sectionAccessCount = sectionAccesses.addCounter("%1$i", 0);
+		sectionAccessCount = sectionAccesses.addCounter(0);
 		Profile heapAllocations = explosion.profiler.createProfile("explosions.benchmark.heap_allocations");
-		heapAllocationMB = heapAllocations.addCounter("%1$i", 0, v -> v / 1048576);
-		requiredHeapAllocationMB = heapAllocations.addCounter("%1$i", 0, v -> v / 1048576);
+		heapAllocationMB = heapAllocations.addCounter(0, v -> v / 1048576);
+		requiredHeapAllocationMB = heapAllocations.addCounter(0, v -> v / 1048576);
+		heapAllocationMB.increment(rays.size() * 36);
+		requiredHeapAllocationMB.increment(rays.size() * 36);
+		cpu = explosion.profiler.createProfile("explosions.benchmark.cpu");
+		cpuTaskCount = cpu.addCounter(0);
 	}
 	
 	@Override
 	public void run() {
-		ExplosionTask task = new ExplosionTask(this, vectors, explosion.level, pos, radius, randomVectorLength, Math.max(minVectorsPerThread, vectors.size() / (Runtime.getRuntime().availableProcessors() * 4)), explosion.level.random);
-		editedSections = pool.invoke(task);
+		if (dda) {
+			ImprovedExplosionDDATask task = new ImprovedExplosionDDATask(this, rays, explosion.level, pos, radius, randomVectorLength, Math.max(minVectorsPerThread, rays.size() / (Runtime.getRuntime().availableProcessors() * 4)));
+			editedSections = pool.invoke(task);
+		} else {
+			ImprovedExplosionTask task = new ImprovedExplosionTask(this, rays, explosion.level, pos, radius, randomVectorLength, reducedRays, Math.max(minVectorsPerThread, rays.size() / (Runtime.getRuntime().availableProcessors() * 4)));
+			editedSections = pool.invoke(task);
+		}
 		rayTracingTime.stopBenchmark();
+		sectionAccessCount.increment(sectionAccessesCache.get());
 		int maxRequiredHeapCache = this.maxRequiredHeapCache.get();
 		for (int i = 0; i < fullSections.size(); i++) {
 			blockCount.increment(4096);
@@ -83,21 +99,23 @@ public final class ExplosionThread extends Thread {
 			heapAllocationMB.increment(16432);
 			maxRequiredHeapCache += 16432;
 		}
+		heapAllocationMB.increment(heapAllocationCache.get());
 		for (BitSet editedBlocks : editedSections.values()) {
 			blockCount.increment(editedBlocks);
 		}
+		cpuTaskCount.increment(taskCount);
 		requiredHeapAllocationMB.increment(maxRequiredHeapCache);
 	}
-	
+
 	public Map<Long, BitSet> getEditedSections() {
 		return editedSections;
 	}
-	
+
 	public Set<Long> getFullSections() {
 		return fullSections;
 	}
 	
-	public ImprovedExplosion getExplosion() {
+	public ExplosionBase getExplosion() {
 		return explosion;
 	}
 }

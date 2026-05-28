@@ -43,12 +43,11 @@ public class ExplosionProfiler {
 			double time = (profile.stopTime - profile.startTime) / 1000d;
 			Object[] args = new Object[1 + profile.counters.size()];
 			args[0] = Component.literal(String.format("%1$.2f", time)).withStyle(ChatFormatting.GOLD);
-			for (int i = 0; i < profile.counters.size(); i++) {
-				Counter counter = profile.counters.get(i);
-				args[i] = Component.literal(String.format(counter.format, counter.getPrintValue())).withStyle(ChatFormatting.GOLD);
+			for (int i = 1; i < profile.counters.size() + 1; i++) {
+				Counter counter = profile.counters.get(i - 1);
+				args[i] = Component.literal(String.format("%,d", counter.getPrintValue())).withStyle(ChatFormatting.GOLD);
 			}
 			message.append("\n  ").append(Component.translatable(profile.messageTranslationKey, args).withStyle(ChatFormatting.WHITE));
-
 		}
 		for (ServerPlayer player : level.players()) {
 			player.sendSystemMessage(message, false);
@@ -75,14 +74,14 @@ public class ExplosionProfiler {
 			stopTime = System.currentTimeMillis();
 		}
 		
-		public Counter addCounter(String format, int initialValue) {
-			Counter counter = new Counter(format, initialValue, v -> v);
+		public Counter addCounter(int initialValue) {
+			Counter counter = new Counter(initialValue, v -> v);
 			counters.add(counter);
 			return counter;
 		}
 
-		public Counter addCounter(String format, int initialValue, Function<Integer, Integer> printValueFunction) {
-			Counter counter = new Counter(format, initialValue, printValueFunction);
+		public Counter addCounter(int initialValue, Function<Integer, Integer> printValueFunction) {
+			Counter counter = new Counter(initialValue, printValueFunction);
 			counters.add(counter);
 			return counter;
 		}
@@ -90,13 +89,11 @@ public class ExplosionProfiler {
 	
 	public static class Counter {
 
-		private final String format;
 		private final Function<Integer, Integer> printValueFunction;
 		
 		private int value;
 		
-		public Counter(String format, int value, Function<Integer, Integer> printValueFunction) {
-			this.format = format;
+		public Counter(int value, Function<Integer, Integer> printValueFunction) {
 			this.printValueFunction = printValueFunction;
 			this.value = value;
 		}

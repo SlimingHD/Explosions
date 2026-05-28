@@ -6,28 +6,27 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.joml.Vector3f;
-
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import mod.explosion.helper.ExplosionProfiler.Counter;
 import mod.explosion.helper.ExplosionProfiler.Profile;
 import mod.explosion.helper.MultithreadedExplosionHandler;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
+import net.minecraft.core.Vec3i;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunkSection;
-import net.minecraft.world.phys.Vec3;
 
 public class ImprovedExplosion extends ExplosionBase {
 
-	private final Vec3 pos;
+	private final BlockPos pos;
 	private final int radius;
 	private final float randomVectorLength;
 	private final boolean multithreaded;
 	
-	public ImprovedExplosion(ServerLevel level, Vec3 pos, int radius, float randomVectorLength, boolean multithreaded) {
+	public ImprovedExplosion(ServerLevel level, BlockPos pos, int radius, float randomVectorLength, boolean multithreaded) {
 		super(level);
 		this.pos = pos;
 		this.radius = radius;
@@ -38,8 +37,10 @@ public class ImprovedExplosion extends ExplosionBase {
 	@Override
 	public void explode() {
 		if (multithreaded) {
+			profiler.setTitle("explosions.benchmark.improved_explosion_multithreaded");
 			explodeMultithreaded();
 		} else {
+			profiler.setTitle("explosions.benchmark.improved_explosion");
 			explodeSinglethreaded();
 		}
 	}
@@ -49,34 +50,35 @@ public class ImprovedExplosion extends ExplosionBase {
 		Profile rayTracingTime = profiler.createProfile("explosions.benchmark.ray_tracing_time");
 		
 		totalTime.startBenchmark();
-		List<Vector3f> rays = new ArrayList<Vector3f>(Mth.ceil(4 * Mth.PI * radius * radius));
+		rayTracingTime.startBenchmark();
+		List<Vec3i> rays = new ArrayList<Vec3i>(Mth.ceil(4 * Mth.PI * radius * radius));
 		for (int x = -radius; x <= radius; ++x) {
 			for (int y = -radius; y <= radius; ++y) {
 				for (int z = -radius; z <= radius; ++z) {
 					float distanceSqr = x * x + y * y + z * z;
 					if (distanceSqr >= radius * radius && distanceSqr <= (radius + 1) * (radius + 1)) {
-						rays.add(new Vector3f(x, y, z).mul(0.7f + random.nextFloat() * randomVectorLength));
+						rays.add(new Vec3i(x, y, z));
 					}
 				}
 			}
 		}
-		rayTracingTime.addCounter("%1$i", rays.size());
+		rayTracingTime.addCounter(rays.size());
 		
-		ExplosionThread explosionThread = new ExplosionThread(this, rays, pos, radius, randomVectorLength);
+		ImprovedExplosionThread explosionThread = new ImprovedExplosionThread(this, rays, pos, radius, randomVectorLength, false, false);
 		MultithreadedExplosionHandler.enqueue(explosionThread);
 	}
 	
 	@SuppressWarnings("deprecation")
 	private void explodeSinglethreaded() {
 		Profile totalTime = profiler.createProfile("explosions.benchmark.total_time");
-		Counter blockCount = totalTime.addCounter("%1$i", 0);
+		Counter blockCount = totalTime.addCounter(0);
 		Profile rayTracingTime = profiler.createProfile("explosions.benchmark.ray_tracing_time");
-		Counter rayCount = rayTracingTime.addCounter("%1$i", 0);
+		Counter rayCount = rayTracingTime.addCounter(0);
 		Profile sectionAccesses = profiler.createProfile("explosions.benchmark.section_accesses");
-		Counter sectionAccessCount = sectionAccesses.addCounter("%1$i", 0);
+		Counter sectionAccessCount = sectionAccesses.addCounter(0);
 		Profile heapAllocations = profiler.createProfile("explosions.benchmark.heap_allocations");
-		Counter heapAllocationMB = heapAllocations.addCounter("%1$i", 0, v -> v / 1048576);
-		Counter requiredHeapAllocationMB = heapAllocations.addCounter("%2$i", 0, v -> v / 1048576);
+		Counter heapAllocationMB = heapAllocations.addCounter(0, v -> v / 1048576);
+		Counter requiredHeapAllocationMB = heapAllocations.addCounter(0, v -> v / 1048576);
 		
 		int maxRequiredHeapCache = 0;
 		int requiredHeapCache = 0;
@@ -99,9 +101,9 @@ public class ImprovedExplosion extends ExplosionBase {
 						float stepY = y / (radius + 0.5f) * 0.3f;
 						float stepZ = z / (radius + 0.5f) * 0.3f;
 
-						double blockX = pos.x;
-						double blockY = pos.y;
-						double blockZ = pos.z;
+						double blockX = pos.getX();
+						double blockY = pos.getY();
+						double blockZ = pos.getZ();
 						
 						int lastPosX = Integer.MAX_VALUE;
 						int lastPosY = Integer.MAX_VALUE;
@@ -116,6 +118,9 @@ public class ImprovedExplosion extends ExplosionBase {
 						float remainingLength = radius * (0.7f + random.nextFloat() * randomVectorLength);
 						
 						for (float step = 0f; step < remainingLength; step += 0.225f) {
+							blockX += stepX;
+							blockY += stepY;
+							blockZ += stepZ;
 							int posX = Mth.floor(blockX);
 							int posY = Mth.floor(blockY);
 							int posZ = Mth.floor(blockZ);
@@ -128,7 +133,7 @@ public class ImprovedExplosion extends ExplosionBase {
 							if (posY < minBuildHeight || posY >= maxBuildHeight || Math.abs(posX) >= 30000000 || Math.abs(posZ) >= 30000000) {
 								break;
 							}
-							long sectionPos = SectionPos.asLong(posX, posY, posZ);
+							long sectionPos = SectionPos.asLong(posX >> 4, posY >> 4, posZ >> 4);
 							int blockIndex = ((posX & 15) << 8) | ((posY & 15) << 4) | (posZ & 15);
 							
 							if ((sectionPos == lastSectionPos && currentSectionEmpty) || emptySections.contains(sectionPos)) {
@@ -136,24 +141,13 @@ public class ImprovedExplosion extends ExplosionBase {
 								continue;
 							}
 							currentSectionEmpty = false;
-							if ((sectionPos == lastSectionPos && currentSectionFull)) {
+							if (sectionPos == lastSectionPos && currentSectionFull) {
 								remainingLength -= currentExplosionResistances[blockIndex];
 								continue;
 							}
 							currentSectionFull = false;
 							
-							if (sectionPos == lastSectionPos) {
-								if (currentSectionEmpty || emptySections.contains(sectionPos)) {
-									currentSectionEmpty = true;
-									continue;
-								}
-								if (currentSectionFull) {
-									remainingLength -= currentExplosionResistances[blockIndex];
-									continue;
-								}
-							} else {
-								currentSectionEmpty = false;
-								currentSectionFull = false;
+							if (sectionPos != lastSectionPos) {
 								currentExplosionResistances = sectionExplosionResistances.get(sectionPos);
 								if (fullSections.contains(sectionPos)) {
 									currentSectionFull = true;
@@ -164,7 +158,7 @@ public class ImprovedExplosion extends ExplosionBase {
 									int chunkX = posX >> 4;
 									int chunkY = posY >> 4;
 									int chunkZ = posZ >> 4;
-									LevelChunkSection section = level.getChunk(chunkX, chunkZ).getSection(chunkY - level.getMinSection());
+									LevelChunkSection section = level.getChunk(chunkX, chunkZ).getSection(level.getSectionIndexFromSectionY(chunkY));
 									sectionAccessCount.increment(1);
 									if (section.hasOnlyAir()) {
 										emptySections.add(sectionPos);
@@ -173,10 +167,11 @@ public class ImprovedExplosion extends ExplosionBase {
 									}
 									float[] explosionResistances = new float[4096];
 									for (int i = 0; i < 4096; ++i) {
-										BlockState state = section.getBlockState(i & 3840, i & 240, i & 15);
-										explosionResistances[i] = Math.max(state.getBlock().getExplosionResistance(), state.getFluidState().getExplosionResistance());
+										BlockState state = section.getBlockState(i >> 8, (i >> 4) & 15, i & 15);
+										explosionResistances[i] = Math.max(state.getBlock().getExplosionResistance(), state.getFluidState().getExplosionResistance()) * 0.167f;
 									}
 									sectionExplosionResistances.put(sectionPos, explosionResistances);
+									currentExplosionResistances = explosionResistances;
 								}
 								currentEditedBlocks = editedSections.get(sectionPos);
 								if (currentEditedBlocks == null) {
@@ -188,11 +183,11 @@ public class ImprovedExplosion extends ExplosionBase {
 							}
 							
 							remainingLength -= currentExplosionResistances[blockIndex];
-							if (remainingLength <= 0f) {
+							if (step >= remainingLength) {
 								break;
 							}
 							currentEditedBlocks.set(blockIndex);
-							if (currentEditedBlocks.nextClearBit(blockIndex) >= 4096) {
+							if (currentEditedBlocks.nextClearBit(0) >= 4096) {
 								fullSections.add(sectionPos);
 								editedSections.remove(sectionPos);
 								//Required heap actually reduces here
@@ -200,9 +195,6 @@ public class ImprovedExplosion extends ExplosionBase {
 							}
 							
 							lastSectionPos = sectionPos;
-							blockX += stepX;
-							blockY += stepY;
-							blockZ += stepZ;
 						}
 					}
 				}
@@ -231,5 +223,8 @@ public class ImprovedExplosion extends ExplosionBase {
 		requiredHeapAllocationMB.increment(maxRequiredHeapCache);
 		finishExplosion(editedSections, fullSections);
 		totalTime.stopBenchmark();
+		if (finishWork != null) {
+			finishWork.run();
+		}
 	}
 }

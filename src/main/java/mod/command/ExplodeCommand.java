@@ -6,6 +6,12 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 
 import mod.explosion.ExplosionBase;
+import mod.explosion.ImprovedExplosion;
+import mod.explosion.ImprovedExplosionDDA;
+import mod.explosion.ImprovedExplosionRayReduced;
+import mod.explosion.ImprovedExplosionRayReduced.RayReduction;
+import mod.explosion.MapUnwrappedExplosion;
+import mod.explosion.SemiUnwrappedExplosion;
 import mod.explosion.SimpleExplosion;
 import mod.explosion.SimpleExplosion.Shape;
 import net.minecraft.commands.CommandSourceStack;
@@ -21,24 +27,32 @@ public class ExplodeCommand {
 	public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
 		dispatcher.register(
 		Commands.literal("explode")
-			.then(Commands.argument("pos", BlockPosArgument.blockPos()))
-				.then(Commands.argument("type", EnumArgument.enumArgument(ExplosionType.class)))
-					.then(Commands.argument("radius", IntegerArgumentType.integer(0, 800)))
-						.then(Commands.argument("randomVectorLength", FloatArgumentType.floatArg(0f, 1f)))
+			.then(Commands.argument("pos", BlockPosArgument.blockPos())
+				.then(Commands.argument("type", EnumArgument.enumArgument(ExplosionType.class))
+					.then(Commands.argument("radius", IntegerArgumentType.integer(0, 1000))
+						.then(Commands.argument("randomVectorLength", FloatArgumentType.floatArg(0f, 1f))
 							.executes(ExplodeCommand::explode)
+						)
+					)
+				)
+			)
 		);
 	}
 	
 	private static int explode(CommandContext<CommandSourceStack> ctx) {
-		BlockPos pos = ctx.getArgument("pos", BlockPos.class);
+		BlockPos pos = BlockPosArgument.getBlockPos(ctx, "pos");
 		ExplosionType type = ctx.getArgument("type", ExplosionType.class);
 		int radius = ctx.getArgument("radius", Integer.class);
 		float randomVectorLength = ctx.getArgument("randomVectorLength", Float.class);
-		ExplosionBase explosion = type.createExplosion(ctx.getSource().getLevel(), pos, radius, randomVectorLength);
-		explosion.explode();
-		explosion.setFinishWork(() -> {
-			explosion.profiler.printResults();
-		});
+		try {
+			ExplosionBase explosion = type.createExplosion(ctx.getSource().getLevel(), pos, radius, randomVectorLength);
+			explosion.setFinishWork(() -> {
+				explosion.profiler.printResults();
+			});
+			explosion.explode();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
 		return 1;
 	}
 	
@@ -46,10 +60,19 @@ public class ExplodeCommand {
 		SIMPLE_HALF_CUBE((level, pos, radius, randomVectorLength) -> new SimpleExplosion(level, Vec3.atCenterOf(pos), radius, randomVectorLength, Shape.HALF_CUBE)),
 		SIMPLE_CUBE((level, pos, radius, randomVectorLength) -> new SimpleExplosion(level, Vec3.atCenterOf(pos), radius, randomVectorLength, Shape.CUBE)),
 		SIMPLE_SPHERE((level, pos, radius, randomVectorLength) -> new SimpleExplosion(level, Vec3.atCenterOf(pos), radius, randomVectorLength, Shape.SPHERE)),
-		IMPROVED((level, pos, radius, randomVectorLength) -> null),
-		IMPROVED_DDA((level, pos, radius, randomVectorLength) -> null),
-		IMPROVED_MULTITHREADED((level, pos, radius, randomVectorLength) -> null),
-		IMPROVED_MULTITHREADED_DDA((level, pos, radius, randomVectorLength) -> null);
+		IMPROVED((level, pos, radius, randomVectorLength) -> new ImprovedExplosion(level, pos, radius, randomVectorLength, false)),
+		IMPROVED_RADIUS_REDUCED((level, pos, radius, randomVectorLength) ->  new ImprovedExplosionRayReduced(level, pos, radius, randomVectorLength, false, RayReduction.BY_RADIUS)),
+		IMPROVED_Y_LIMIT_REDUCED((level, pos, radius, randomVectorLength) ->  new ImprovedExplosionRayReduced(level, pos, radius, randomVectorLength, false, RayReduction.BY_Y_LIMIT)),
+		IMPROVED_FULLY_REDUCED((level, pos, radius, randomVectorLength) ->  new ImprovedExplosionRayReduced(level, pos, radius, randomVectorLength, false, RayReduction.BOTH)),
+		IMPROVED_MULTITHREADED((level, pos, radius, randomVectorLength) ->  new ImprovedExplosion(level, pos, radius, randomVectorLength, true)),
+		IMPROVED_RADIUS_REDUCED_MULTITHREADED((level, pos, radius, randomVectorLength) ->  new ImprovedExplosionRayReduced(level, pos, radius, randomVectorLength, true, RayReduction.BY_RADIUS)),
+		IMPROVED_Y_LIMIT_REDUCED_MULTITHREADED((level, pos, radius, randomVectorLength) ->  new ImprovedExplosionRayReduced(level, pos, radius, randomVectorLength, true, RayReduction.BY_Y_LIMIT)),
+		IMPROVED_FULLY_REDUCED_MULTITHREADED((level, pos, radius, randomVectorLength) ->  new ImprovedExplosionRayReduced(level, pos, radius, randomVectorLength, true, RayReduction.BOTH)),
+		DDA((level, pos, radius, randomVectorLength) -> new ImprovedExplosionDDA(level, pos, radius, randomVectorLength, false)),
+		DDA_MULTITHREADED((level, pos, radius, randomVectorLength) -> new ImprovedExplosionDDA(level, pos, radius, randomVectorLength, true)),
+		MAP_UNWRAPPED((level, pos, radius, randomVectorLength) -> new MapUnwrappedExplosion(level, pos, radius, randomVectorLength, false)),
+		MAP_UNWRAPPED_MULTITHREADED((level, pos, radius, randomVectorLength) -> new MapUnwrappedExplosion(level, pos, radius, randomVectorLength, true)),
+		SEMI_UNWRAPPED_MULTITHREADED((level, pos, radius, randomVectorLength) -> new SemiUnwrappedExplosion(level, pos, radius, randomVectorLength));
 		
 		private final ExplosionFunction explosionFunction;
 		

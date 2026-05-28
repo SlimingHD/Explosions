@@ -30,14 +30,14 @@ public class SimpleExplosion extends ExplosionBase {
 	@Override
 	public void explode() {
 		Profile totalTime = profiler.createProfile("explosions.benchmark.total_time");
-		Counter blockCount = totalTime.addCounter("%1$i", 0);
+		Counter blockCount = totalTime.addCounter(0);
 		Profile rayTracingTime = profiler.createProfile("explosions.benchmark.ray_tracing_time");
-		Counter rayCount = rayTracingTime.addCounter("%1$i", 0);
+		Counter rayCount = rayTracingTime.addCounter(0);
 		Profile sectionAccesses = profiler.createProfile("explosions.benchmark.section_accesses");
-		Counter sectionAccessCount = sectionAccesses.addCounter("%1$i", 0);
+		Counter sectionAccessCount = sectionAccesses.addCounter(0);
 		Profile heapAllocations = profiler.createProfile("explosions.benchmark.heap_allocations");
-		Counter heapAllocationMB = heapAllocations.addCounter("%1$i", 0, v -> v / 1048576);
-		Counter requiredHeapAllocationMB = heapAllocations.addCounter("%2$i", 0, v -> v / 1048576);
+		Counter heapAllocationMB = heapAllocations.addCounter(0, v -> v / 1048576);
+		Counter requiredHeapAllocationMB = heapAllocations.addCounter(0, v -> v / 1048576);
 		
 		totalTime.startBenchmark();
 		switch(rayTarget) {
@@ -46,6 +46,9 @@ public class SimpleExplosion extends ExplosionBase {
 			case SPHERE: explodeSphere(rayTracingTime, blockCount, rayCount, sectionAccessCount, heapAllocationMB, requiredHeapAllocationMB); break;
 		}
 		totalTime.stopBenchmark();
+		if (finishWork != null) {
+			finishWork.run();
+		}
 	}
 	
 	private void explodeHalfCube(Profile rayTracingTime, Counter blockCount, Counter rayCount, Counter sectionAccessCount, Counter heapAllocationMB, Counter requiredHeapAllocationMBs) {
@@ -128,6 +131,9 @@ public class SimpleExplosion extends ExplosionBase {
 				break;
 			}
 			if (pos.equals(lastPos)) {
+				blockX += stepX;
+				blockY += stepY;
+				blockZ += stepZ;
 				continue;
 			}
 			lastPos = pos;
@@ -141,8 +147,9 @@ public class SimpleExplosion extends ExplosionBase {
 			
 			if (!state.isAir()) {
 				float explosionResistance = Math.max(state.getBlock().getExplosionResistance(), state.getFluidState().getExplosionResistance());
-				remainingLength -= explosionResistance;
-				if (remainingLength <= 0f) {
+				//Explosion Resistance is made weaker on purpose to ensure large explosions are actually large
+				remainingLength -= explosionResistance * 0.167f;
+				if (step >= remainingLength) {
 					break;
 				}
 				if (toExplode.add(pos)) {
