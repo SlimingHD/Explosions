@@ -51,10 +51,7 @@ public class MapUnwrappedExplosionTask extends RecursiveTask<Void> {
 	
 	@SuppressWarnings("deprecation")
 	private void calculate() {
-		int sectionAccessesCache = 0;
-		int heapAllocationCache = 0;
-		int requiredHeapCache = 0;
-		int maxRequiredHeapCache = 0;
+		long heapAllocationCache = 0;
 		
 		int minBuildHeight = level.getMinBuildHeight();
 		int maxBuildHeight = level.getMaxBuildHeight();
@@ -77,22 +74,22 @@ public class MapUnwrappedExplosionTask extends RecursiveTask<Void> {
 			int stepX = dirX > 0 ? 1 : -1;
 			int stepY = dirY > 0 ? 1 : -1;
 			int stepZ = dirZ > 0 ? 1 : -1;
-			
-			float deltaX = Math.abs(1f / dirX);
-			float deltaY = Math.abs(1f / dirY);
-			float deltaZ = Math.abs(1f / dirZ);
+
+			float deltaX = dirX == 0f ? Float.POSITIVE_INFINITY : Math.abs(1f / dirX);
+			float deltaY = dirY == 0f ? Float.POSITIVE_INFINITY : Math.abs(1f / dirY);
+			float deltaZ = dirZ == 0f ? Float.POSITIVE_INFINITY : Math.abs(1f / dirZ);
 
 			int posX = pos.getX();
 			int posY = pos.getY();
 			int posZ = pos.getZ();
+
+			float nextVoxelX = stepX > 0 ? posX + 1 : posX - 1;
+			float nextVoxelY = stepY > 0 ? posY + 1 : posY - 1;
+			float nextVoxelZ = stepZ > 0 ? posZ + 1 : posZ - 1;
 			
-			float nextVoxelX = stepX > 0 ? posX + 1 : posX;
-			float nextVoxelY = stepY > 0 ? posY + 1 : posY;
-			float nextVoxelZ = stepZ > 0 ? posZ + 1 : posZ;
-			
-			float tMaxX = (nextVoxelX - posX) / dirX;
-			float tMaxY = (nextVoxelY - posY) / dirY;
-			float tMaxZ = (nextVoxelZ - posZ) / dirZ;		
+			float tMaxX = dirX == 0f ? Float.POSITIVE_INFINITY : (nextVoxelX - posX) / dirX;
+			float tMaxY = dirY == 0f ? Float.POSITIVE_INFINITY : (nextVoxelY - posY) / dirY;
+			float tMaxZ = dirZ == 0f ? Float.POSITIVE_INFINITY : (nextVoxelZ - posZ) / dirZ;
 			float t = 0f;
 			
 			int lastSectionIndex = Integer.MAX_VALUE;
@@ -104,21 +101,17 @@ public class MapUnwrappedExplosionTask extends RecursiveTask<Void> {
 			boolean firstIteration = true;
 			
 			while (remainingLength > 0f) {
-				float travel = 0f;
+				float travel = 0.3f;
 				if (!firstIteration) {
 					float nextT = Math.min(tMaxX, Math.min(tMaxY, tMaxZ));
 
 					if (tMaxX == nextT) {
 					    posX += stepX;
 					    tMaxX += deltaX;
-					}
-
-					if (tMaxY == nextT) {
+					} else if (tMaxY == nextT) {
 					    posY += stepY;
 					    tMaxY += deltaY;
-					}
-
-					if (tMaxZ == nextT) {
+					} else if (tMaxZ == nextT) {
 					    posZ += stepZ;
 					    tMaxZ += deltaZ;
 					}
@@ -126,7 +119,7 @@ public class MapUnwrappedExplosionTask extends RecursiveTask<Void> {
 					travel = nextT - t;
 					t = nextT;
 					remainingLength -= travel;
-					travel = Math.max(0.225f, travel);
+					travel = Math.max(0.3f, travel);
 				}
 				firstIteration = false;
 				
@@ -159,7 +152,6 @@ public class MapUnwrappedExplosionTask extends RecursiveTask<Void> {
 							int chunkY = posY >> 4;
 							int chunkZ = posZ >> 4;
 							LevelChunkSection section = level.getChunk(chunkX, chunkZ).getSection(level.getSectionIndexFromSectionY(chunkY));
-							sectionAccessesCache += 1;
 							if (section.hasOnlyAir()) {
 								explosionThread.emptySections.set(sectionIndex);
 								explosionThread.sectionExplosionResistances.clear(sectionIndex);
@@ -168,7 +160,7 @@ public class MapUnwrappedExplosionTask extends RecursiveTask<Void> {
 							float[] explosionResistances = new float[4096];
 							for (int i = 0; i < 4096; ++i) {
 								BlockState state = section.getBlockState(i >> 8, (i >> 4) & 15, i & 15);
-								explosionResistances[i] = Math.max(state.getBlock().getExplosionResistance(), state.getFluidState().getExplosionResistance()) * 0.167f;
+								explosionResistances[i] = state.isAir() ? 0f : (Math.max(state.getBlock().getExplosionResistance(), state.getFluidState().getExplosionResistance()) + 0.3f) * 0.3f;
 							}
 							currentExplosionResistances = explosionThread.sectionExplosionResistances.set(sectionIndex, explosionResistances);
 						} else {
@@ -183,8 +175,8 @@ public class MapUnwrappedExplosionTask extends RecursiveTask<Void> {
 						if (explosionThread.editedSections.enterWrite(sectionIndex)) {
 							currentEditedBlocks = explosionThread.editedSections.set(sectionIndex, new ConcurrentBitSet(4096));
 							heapAllocationCache += 560;
-							requiredHeapCache += 560;
-							maxRequiredHeapCache = Math.max(requiredHeapCache, maxRequiredHeapCache);
+							long currentRequired = explosionThread.requiredHeapCache.addAndGet(560);
+							explosionThread.maxRequiredHeapCache.accumulateAndGet(currentRequired, Math::max);
 						} else {
 							currentEditedBlocks = explosionThread.editedSections.get(sectionIndex);
 						}
@@ -199,15 +191,13 @@ public class MapUnwrappedExplosionTask extends RecursiveTask<Void> {
 				if (currentEditedBlocks.cardinality() == 4096) {
 					explosionThread.fullSections.set(sectionIndex);
 					explosionThread.editedSections.clear(sectionIndex);
-					//Required heap actually reduces here
-					requiredHeapCache -= 560;
+					currentSectionFull = true;
+					explosionThread.requiredHeapCache.addAndGet(-560);
 				}
 				
 				lastSectionIndex = sectionIndex;
 			}
 		}
-		explosionThread.sectionAccessesCache.addAndGet(sectionAccessesCache);
 		explosionThread.heapAllocationCache.addAndGet(heapAllocationCache);
-		explosionThread.maxRequiredHeapCache.accumulateAndGet(maxRequiredHeapCache, Math::max);
 	}
 }

@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import mod.explosion.helper.ExplosionProfiler.Counter;
@@ -30,7 +30,6 @@ public final class ImprovedExplosionThread extends Thread {
 	public final Profile totalTime;
 	public final Counter blockCount;
 	public final Profile rayTracingTime;
-	public final Counter sectionAccessCount;
 	public final Counter heapAllocationMB;
 	public final Counter requiredHeapAllocationMB;
 	public final Profile cpu;
@@ -40,9 +39,9 @@ public final class ImprovedExplosionThread extends Thread {
 	final Set<Long> fullSections = ConcurrentHashMap.newKeySet();
 	final ConcurrentHashMap<Long, float[]> sectionExplosionResistances = new ConcurrentHashMap<Long, float[]>();
 
-	public final AtomicInteger sectionAccessesCache = new AtomicInteger();
-	public final AtomicInteger heapAllocationCache = new AtomicInteger();
-	public final AtomicInteger maxRequiredHeapCache = new AtomicInteger();
+	public final AtomicLong heapAllocationCache = new AtomicLong();
+	public final AtomicLong requiredHeapCache = new AtomicLong();
+	public final AtomicLong maxRequiredHeapCache = new AtomicLong();
 	
 	private Map<Long, BitSet> editedSections = new Long2ObjectOpenHashMap<BitSet>();
 	
@@ -60,8 +59,6 @@ public final class ImprovedExplosionThread extends Thread {
 		totalTime = explosion.profiler.getProfile(0);
 		blockCount = totalTime.addCounter(0);
 		rayTracingTime = explosion.profiler.getProfile(1);
-		Profile sectionAccesses = explosion.profiler.createProfile("explosions.benchmark.section_accesses");
-		sectionAccessCount = sectionAccesses.addCounter(0);
 		Profile heapAllocations = explosion.profiler.createProfile("explosions.benchmark.heap_allocations");
 		heapAllocationMB = heapAllocations.addCounter(0, v -> v / 1048576);
 		requiredHeapAllocationMB = heapAllocations.addCounter(0, v -> v / 1048576);
@@ -81,24 +78,10 @@ public final class ImprovedExplosionThread extends Thread {
 			editedSections = pool.invoke(task);
 		}
 		rayTracingTime.stopBenchmark();
-		sectionAccessCount.increment(sectionAccessesCache.get());
-		int maxRequiredHeapCache = this.maxRequiredHeapCache.get();
-		for (int i = 0; i < fullSections.size(); i++) {
-			blockCount.increment(4096);
-			//We can do this here, since the count in this set never decreases
-			heapAllocationMB.increment(40);
-			maxRequiredHeapCache += 40;
-		}
-		for (int i = 0; i < emptySections.size(); i++) {
-			//We can do this here, since the count in this set never decreases
-			heapAllocationMB.increment(40);
-			maxRequiredHeapCache += 40;
-		}
-		for (int i = 0; i < sectionExplosionResistances.size(); i++) {
-			//We can do this here, since the count in this set never decreases
-			heapAllocationMB.increment(16432);
-			maxRequiredHeapCache += 16432;
-		}
+		long maxRequiredHeapCache = this.maxRequiredHeapCache.get();
+		blockCount.increment(4096 * fullSections.size());
+		heapAllocationMB.increment(40 * (fullSections.size() + emptySections.size()) + 16432 * sectionExplosionResistances.size());
+		maxRequiredHeapCache += 40 * (fullSections.size() + emptySections.size()) + 16432 * sectionExplosionResistances.size();
 		heapAllocationMB.increment(heapAllocationCache.get());
 		for (BitSet editedBlocks : editedSections.values()) {
 			blockCount.increment(editedBlocks);

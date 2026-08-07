@@ -74,14 +74,12 @@ public class ImprovedExplosion extends ExplosionBase {
 		Counter blockCount = totalTime.addCounter(0);
 		Profile rayTracingTime = profiler.createProfile("explosions.benchmark.ray_tracing_time");
 		Counter rayCount = rayTracingTime.addCounter(0);
-		Profile sectionAccesses = profiler.createProfile("explosions.benchmark.section_accesses");
-		Counter sectionAccessCount = sectionAccesses.addCounter(0);
 		Profile heapAllocations = profiler.createProfile("explosions.benchmark.heap_allocations");
 		Counter heapAllocationMB = heapAllocations.addCounter(0, v -> v / 1048576);
 		Counter requiredHeapAllocationMB = heapAllocations.addCounter(0, v -> v / 1048576);
 		
-		int maxRequiredHeapCache = 0;
-		int requiredHeapCache = 0;
+		long maxRequiredHeapCache = 0;
+		long requiredHeapCache = 0;
 		
 		totalTime.startBenchmark();
 		rayTracingTime.startBenchmark();
@@ -115,32 +113,35 @@ public class ImprovedExplosion extends ExplosionBase {
 						float[] currentExplosionResistances = null;
 						BitSet currentEditedBlocks = null;
 						
-						float remainingLength = radius * (0.7f + random.nextFloat() * randomVectorLength);
+						float remainingLength = radius * (1f + random.nextFloat() * randomVectorLength);
 						
-						for (float step = 0f; step < remainingLength; step += 0.225f) {
+						for (float step = 0f; step < remainingLength; step += 0.3f) {
 							blockX += stepX;
 							blockY += stepY;
 							blockZ += stepZ;
 							int posX = Mth.floor(blockX);
 							int posY = Mth.floor(blockY);
 							int posZ = Mth.floor(blockZ);
-							if (posX == lastPosX && posY == lastPosY && posZ == lastPosZ) {
-								continue;
-							}
-							lastPosX = posX;
-							lastPosY = posY;
-							lastPosZ = posZ;
 							if (posY < minBuildHeight || posY >= maxBuildHeight || Math.abs(posX) >= 30000000 || Math.abs(posZ) >= 30000000) {
 								break;
 							}
-							long sectionPos = SectionPos.asLong(posX >> 4, posY >> 4, posZ >> 4);
-							int blockIndex = ((posX & 15) << 8) | ((posY & 15) << 4) | (posZ & 15);
 							
+							long sectionPos = SectionPos.asLong(posX >> 4, posY >> 4, posZ >> 4);
 							if ((sectionPos == lastSectionPos && currentSectionEmpty) || emptySections.contains(sectionPos)) {
 								currentSectionEmpty = true;
 								continue;
 							}
 							currentSectionEmpty = false;
+
+							int blockIndex = ((posX & 15) << 8) | ((posY & 15) << 4) | (posZ & 15);
+							if (posX == lastPosX && posY == lastPosY && posZ == lastPosZ) {
+								remainingLength -= currentExplosionResistances[blockIndex];
+								continue;
+							}
+							lastPosX = posX;
+							lastPosY = posY;
+							lastPosZ = posZ;
+							
 							if (sectionPos == lastSectionPos && currentSectionFull) {
 								remainingLength -= currentExplosionResistances[blockIndex];
 								continue;
@@ -159,7 +160,6 @@ public class ImprovedExplosion extends ExplosionBase {
 									int chunkY = posY >> 4;
 									int chunkZ = posZ >> 4;
 									LevelChunkSection section = level.getChunk(chunkX, chunkZ).getSection(level.getSectionIndexFromSectionY(chunkY));
-									sectionAccessCount.increment(1);
 									if (section.hasOnlyAir()) {
 										emptySections.add(sectionPos);
 										currentSectionEmpty = true;
@@ -168,7 +168,7 @@ public class ImprovedExplosion extends ExplosionBase {
 									float[] explosionResistances = new float[4096];
 									for (int i = 0; i < 4096; ++i) {
 										BlockState state = section.getBlockState(i >> 8, (i >> 4) & 15, i & 15);
-										explosionResistances[i] = Math.max(state.getBlock().getExplosionResistance(), state.getFluidState().getExplosionResistance()) * 0.167f;
+										explosionResistances[i] = state.isAir() ? 0f : (Math.max(state.getBlock().getExplosionResistance(), state.getFluidState().getExplosionResistance()) + 0.3f) * 0.3f * 0.3f;
 									}
 									sectionExplosionResistances.put(sectionPos, explosionResistances);
 									currentExplosionResistances = explosionResistances;
@@ -190,7 +190,7 @@ public class ImprovedExplosion extends ExplosionBase {
 							if (currentEditedBlocks.nextClearBit(0) >= 4096) {
 								fullSections.add(sectionPos);
 								editedSections.remove(sectionPos);
-								//Required heap actually reduces here
+								currentSectionFull = true;
 								requiredHeapCache -= 560;
 							}
 							
@@ -201,25 +201,14 @@ public class ImprovedExplosion extends ExplosionBase {
 			}
 		}
 		rayTracingTime.stopBenchmark();
-		for (int i = 0; i < fullSections.size(); i++) {
-			blockCount.increment(4096);
-			//We can do this here, since the count in this set never decreases
-			heapAllocationMB.increment(40);
-			maxRequiredHeapCache += 40;
-		}
-		for (int i = 0; i < emptySections.size(); i++) {
-			//We can do this here, since the count in this set never decreases
-			heapAllocationMB.increment(40);
-			maxRequiredHeapCache += 40;
-		}
-		for (int i = 0; i < sectionExplosionResistances.size(); i++) {
-			//We can do this here, since the count in this set never decreases
-			heapAllocationMB.increment(16432);
-			maxRequiredHeapCache += 16432;
-		}
+		heapAllocationMB.increment(40 * (fullSections.size() + emptySections.size()) + 16432 * sectionExplosionResistances.size());
+		maxRequiredHeapCache += 40 * (fullSections.size() + emptySections.size()) + 16432 * sectionExplosionResistances.size();
+
+		blockCount.increment(fullSections.size() * 4096);
 		for (BitSet editedBlocks : editedSections.values()) {
 			blockCount.increment(editedBlocks);
 		}
+		
 		requiredHeapAllocationMB.increment(maxRequiredHeapCache);
 		finishExplosion(editedSections, fullSections);
 		totalTime.stopBenchmark();

@@ -3,7 +3,7 @@ package mod.explosion;
 import java.util.BitSet;
 import java.util.List;
 import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import mod.explosion.helper.ConcurrentArray;
 import mod.explosion.helper.ConcurrentBitSet;
@@ -34,9 +34,9 @@ public class MapUnwrappedExplosionThread extends Thread {
 	public final Profile cpu;
 	public final Counter cpuTaskCount;
 
-	public final AtomicInteger sectionAccessesCache = new AtomicInteger();
-	public final AtomicInteger heapAllocationCache = new AtomicInteger();
-	public final AtomicInteger maxRequiredHeapCache = new AtomicInteger();
+	public final AtomicLong heapAllocationCache = new AtomicLong();
+	public final AtomicLong requiredHeapCache = new AtomicLong();
+	public final AtomicLong maxRequiredHeapCache = new AtomicLong();
 	
 	public final ConcurrentArray<float[]> sectionExplosionResistances;
 	public final ConcurrentBitSet emptySections;
@@ -89,28 +89,10 @@ public class MapUnwrappedExplosionThread extends Thread {
 	public void run() {
 		pool.invoke(new MapUnwrappedExplosionTask(this, rays, explosion.level, pos, radius, randomVectorLength, maxReachSection, maxReachSectionY));
 		rayTracingTime.stopBenchmark();
-		sectionAccessCount.increment(sectionAccessesCache.get());
-		int maxRequiredHeapCache = this.maxRequiredHeapCache.get();
-		for (int i = 0; i < fullSections.size(); i++) {
-			if (fullSections.get(i)) {
-				blockCount.increment(4096);
-			}
-			//We can do this here, since the count in this set never decreases
-			heapAllocationMB.increment(40);
-			maxRequiredHeapCache += 40;
-		}
-		for (int i = 0; i < emptySections.size(); i++) {
-			//We can do this here, since the count in this set never decreases
-			heapAllocationMB.increment(40);
-			maxRequiredHeapCache += 40;
-		}
-		for (int i = 0; i < sectionExplosionResistances.size(); i++) {
-			//We can do this here, since the count in this set never decreases
-			if (sectionExplosionResistances.get(i) != null) {
-				heapAllocationMB.increment(16432);
-				maxRequiredHeapCache += 16432;
-			}
-		}
+		long maxRequiredHeapCache = this.maxRequiredHeapCache.get();
+		blockCount.increment(4096 * fullSections.size());
+		heapAllocationMB.increment(40 * (fullSections.size() + emptySections.size()) + 16432 * sectionExplosionResistances.size());
+		maxRequiredHeapCache += 40 * (fullSections.size() + emptySections.size()) + 16432 * sectionExplosionResistances.size();
 		heapAllocationMB.increment(heapAllocationCache.get());
 		for (int i = 0; i < editedSections.size(); i++) {
 			ConcurrentBitSet editedBlocks = editedSections.get(i);

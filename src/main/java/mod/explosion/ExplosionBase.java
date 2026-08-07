@@ -11,6 +11,8 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import mod.explosion.helper.ExplosionProfiler;
+import mod.explosion.helper.ExplosionProfiler.Counter;
+import mod.explosion.helper.ExplosionProfiler.Profile;
 import mod.explosion.helper.HeightmapUpdateHelper;
 import mod.explosion.helper.LightUpdateHelper;
 import mod.network.ClientboundUpdateChunkSectionPacket;
@@ -79,9 +81,6 @@ public abstract class ExplosionBase {
 				x -= maxReachSection / 2;
 				y -= maxReachSectionY / 2;
 				z -= maxReachSection / 2;
-				if (center.y() + y < level.getMinSection() || center.y() + y >= level.getMaxSection()) {
-					System.out.println("DU SPAST2");
-				}
 				editedSectionsMap.put(SectionPos.asLong(center.x() + x, center.y() + y, center.z() + z), editedBlocks);
 			}
 		}
@@ -95,9 +94,6 @@ public abstract class ExplosionBase {
 				x -= maxReachSection / 2;
 				y -= maxReachSectionY / 2;
 				z -= maxReachSection / 2;
-				if (center.y() + y < level.getMinSection() || center.y() + y >= level.getMaxSection()) {
-					System.out.println("DU SPAST");
-				}
 				fullSectionsMap.add(SectionPos.asLong(center.x() + x, center.y() + y, center.z() + z));
 			}
 		}
@@ -105,6 +101,11 @@ public abstract class ExplosionBase {
 	}
 	
 	public void finishExplosion(Map<Long, BitSet> editedSections, Set<Long> fullSections) {
+		Profile blockProfile = profiler.createProfile("explosions.benchmark.blocks_destroyed");
+		Counter blockCounter = blockProfile.addCounter(0); 
+
+		blockCounter.increment(4096 * fullSections.size());
+		
 		HashMap<LevelChunk, BitSet> chunks = new HashMap<>();
 		Long2ObjectMap<LightUpdateHelper.LightDataHolder> dataLayerCache = new Long2ObjectOpenHashMap<>();
 		
@@ -137,6 +138,9 @@ public abstract class ExplosionBase {
 			
 			for (int i = 0; i < 4096; i++) {
 				if (toRemove.get(i)) {
+					if (!states.get(i >> 8, (i >> 4) & 15, i & 15).isAir()) {
+						blockCounter.increment(1);
+					}
 					states.set(i >> 8, (i >> 4) & 15, i & 15, Blocks.AIR.defaultBlockState());
 				}
 			}

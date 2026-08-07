@@ -1,7 +1,7 @@
 {
-	"explosions.benchmark.total_time": "Total time spent for exploding %2$s blocks: %1$ss",
+	"explosions.benchmark.total_time": "Total time for processing %2$s affected voxels: %1$ss",
 	"explosions.benchmark.ray_tracing_time": "Time spent for ray-tracing %2$s rays: %1$ss",
-	"explosions.benchmark.section_accesses": "Level section access count: %2$s",
+	"explosions.benchmark.blocks_destroyed": "Total amount of blocks destroyed: %2$s",
 	"explosions.benchmark.heap_allocations": "Estimated heap allocations: %2$sMB, Peak: %3$sMB",
 	"explosions.benchmark.ray_creation_time": "Time for creation of rays: %1$ss",
 	"explosions.benchmark.cpu": "CPU tasks used: %2$s",

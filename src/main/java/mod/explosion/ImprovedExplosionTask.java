@@ -66,10 +66,7 @@ public class ImprovedExplosionTask extends RecursiveTask<Long2ObjectMap<BitSet>>
 
 	@SuppressWarnings("deprecation")
 	private Long2ObjectMap<BitSet> calculate() {
-		int sectionAccessesCache = 0;
-		int heapAllocationCache = 0;
-		int requiredHeapCache = 0;
-		int maxRequiredHeapCache = 0;
+		long heapAllocationCache = 0;
 		
 		Long2ObjectMap<BitSet> editedSections = new Long2ObjectOpenHashMap<BitSet>();
 		int minBuildHeight = level.getMinBuildHeight();
@@ -94,32 +91,35 @@ public class ImprovedExplosionTask extends RecursiveTask<Long2ObjectMap<BitSet>>
 			float[] currentExplosionResistances = null;
 			BitSet currentEditedBlocks = null;
 			
-			float remainingLength = radius * ((reducedRays ? 1f : 0.7f) + random.nextFloat() * randomVectorLength);
+			float remainingLength = radius * ((reducedRays ? 1.175f : 1f) + random.nextFloat() * randomVectorLength);
 			
-			for (float step = 0f; step < remainingLength; step += 0.225f) {
+			for (float step = 0f; step < remainingLength; step += 0.3f) {
 				blockX += stepX;
 				blockY += stepY;
 				blockZ += stepZ;
 				int posX = Mth.floor(blockX);
 				int posY = Mth.floor(blockY);
 				int posZ = Mth.floor(blockZ);
-				if (posX == lastPosX && posY == lastPosY && posZ == lastPosZ) {
-					continue;
-				}
-				lastPosX = posX;
-				lastPosY = posY;
-				lastPosZ = posZ;
 				if (posY < minBuildHeight || posY > maxBuildHeight || Math.abs(posX) >= 30000000 || Math.abs(posZ) >= 30000000) {
 					break;
 				}
 				long sectionPos = SectionPos.asLong(posX >> 4, posY >> 4, posZ >> 4);
-				int blockIndex = ((posX & 15) << 8) | ((posY & 15) << 4) | (posZ & 15);
 				
 				if ((sectionPos == lastSectionPos && currentSectionEmpty) || explosionThread.emptySections.contains(sectionPos)) {
 					currentSectionEmpty = true;
 					continue;
 				}
 				currentSectionEmpty = false;
+
+				int blockIndex = ((posX & 15) << 8) | ((posY & 15) << 4) | (posZ & 15);
+				if (posX == lastPosX && posY == lastPosY && posZ == lastPosZ) {
+					remainingLength -= currentExplosionResistances[blockIndex];
+					continue;
+				}
+				lastPosX = posX;
+				lastPosY = posY;
+				lastPosZ = posZ;
+				
 				if (sectionPos == lastSectionPos && currentSectionFull) {
 					remainingLength -= currentExplosionResistances[blockIndex];
 					continue;
@@ -138,7 +138,6 @@ public class ImprovedExplosionTask extends RecursiveTask<Long2ObjectMap<BitSet>>
 						int chunkY = posY >> 4;
 						int chunkZ = posZ >> 4;
 						LevelChunkSection section = level.getChunk(chunkX, chunkZ).getSection(level.getSectionIndexFromSectionY(chunkY));
-						sectionAccessesCache++;
 						if (section.hasOnlyAir()) {
 							explosionThread.emptySections.add(sectionPos);
 							currentSectionEmpty = true;
@@ -148,7 +147,7 @@ public class ImprovedExplosionTask extends RecursiveTask<Long2ObjectMap<BitSet>>
 							float[] explosionResistances = new float[4096];
 							for (int i = 0; i < 4096; ++i) {
 								BlockState state = section.getBlockState(i >> 8, (i >> 4) & 15, i & 15);
-								explosionResistances[i] = Math.max(state.getBlock().getExplosionResistance(), state.getFluidState().getExplosionResistance()) * 0.167f;
+								explosionResistances[i] = state.isAir() ? 0f : (Math.max(state.getBlock().getExplosionResistance(), state.getFluidState().getExplosionResistance()) + 0.3f) * 0.3f * 0.3f;
 							}
 							return explosionResistances;
 						});
@@ -157,8 +156,8 @@ public class ImprovedExplosionTask extends RecursiveTask<Long2ObjectMap<BitSet>>
 					if (currentEditedBlocks == null) {
 						editedSections.put(sectionPos, currentEditedBlocks = new BitSet(4096));
 						heapAllocationCache += 560;
-						requiredHeapCache += 560;
-						maxRequiredHeapCache = Math.max(requiredHeapCache, maxRequiredHeapCache);
+						long currentRequired = explosionThread.requiredHeapCache.addAndGet(560);
+						explosionThread.maxRequiredHeapCache.accumulateAndGet(currentRequired, Math::max);
 					}
 				}
 				
@@ -170,16 +169,14 @@ public class ImprovedExplosionTask extends RecursiveTask<Long2ObjectMap<BitSet>>
 				if (currentEditedBlocks.nextClearBit(0) >= 4096) {
 					explosionThread.fullSections.add(sectionPos);
 					editedSections.remove(sectionPos);
-					//Required heap actually reduces here
-					requiredHeapCache -= 560;
+					currentSectionFull = true;
+					explosionThread.requiredHeapCache.addAndGet(-560);
 				}
 				
 				lastSectionPos = sectionPos;
 			}
 		}
-		explosionThread.sectionAccessesCache.addAndGet(sectionAccessesCache);
 		explosionThread.heapAllocationCache.addAndGet(heapAllocationCache);
-		explosionThread.maxRequiredHeapCache.accumulateAndGet(maxRequiredHeapCache, Math::max);
 		return editedSections;
 	}
 }

@@ -74,7 +74,7 @@ public class ImprovedExplosionDDA extends ExplosionBase {
 		rayTracingTime.addCounter(rays.size());
 
 		rayTracingTime.startBenchmark();
-		ImprovedExplosionThread explosionThread = new ImprovedExplosionThread(this, rays, pos, radius, randomVectorLength, true, true);
+		ImprovedExplosionThread explosionThread = new ImprovedExplosionThread(this, rays, pos, radius, randomVectorLength, false, true);
 		MultithreadedExplosionHandler.enqueue(explosionThread);
 	}
 	
@@ -84,14 +84,12 @@ public class ImprovedExplosionDDA extends ExplosionBase {
 		Counter blockCount = totalTime.addCounter(0);
 		Profile rayTracingTime = profiler.createProfile("explosions.benchmark.ray_tracing_time");
 		Counter rayCount = rayTracingTime.addCounter(0);
-		Profile sectionAccesses = profiler.createProfile("explosions.benchmark.section_accesses");
-		Counter sectionAccessCount = sectionAccesses.addCounter(0);
 		Profile heapAllocations = profiler.createProfile("explosions.benchmark.heap_allocations");
 		Counter heapAllocationMB = heapAllocations.addCounter(0, v -> v / 1048576);
 		Counter requiredHeapAllocationMB = heapAllocations.addCounter(0, v -> v / 1048576);
 		
-		int maxRequiredHeapCache = 0;
-		int requiredHeapCache = 0;
+		long maxRequiredHeapCache = 0;
+		long requiredHeapCache = 0;
 		
 		totalTime.startBenchmark();
 		rayTracingTime.startBenchmark();
@@ -121,21 +119,21 @@ public class ImprovedExplosionDDA extends ExplosionBase {
 						int stepY = dirY > 0 ? 1 : -1;
 						int stepZ = dirZ > 0 ? 1 : -1;
 						
-						float deltaX = Math.abs(1f / dirX);
-						float deltaY = Math.abs(1f / dirY);
-						float deltaZ = Math.abs(1f / dirZ);
+						float deltaX = dirX == 0f ? Float.POSITIVE_INFINITY : Math.abs(1f / dirX);
+						float deltaY = dirY == 0f ? Float.POSITIVE_INFINITY : Math.abs(1f / dirY);
+						float deltaZ = dirZ == 0f ? Float.POSITIVE_INFINITY : Math.abs(1f / dirZ);
 
 						int posX = pos.getX();
 						int posY = pos.getY();
 						int posZ = pos.getZ();
 						
-						float nextVoxelX = stepX > 0 ? posX + 1 : posX;
-						float nextVoxelY = stepY > 0 ? posY + 1 : posY;
-						float nextVoxelZ = stepZ > 0 ? posZ + 1 : posZ;
+						float nextVoxelX = stepX > 0 ? posX + 1 : posX - 1;
+						float nextVoxelY = stepY > 0 ? posY + 1 : posY - 1;
+						float nextVoxelZ = stepZ > 0 ? posZ + 1 : posZ - 1;
 						
-						float tMaxX = (nextVoxelX - posX) / dirX;
-						float tMaxY = (nextVoxelY - posY) / dirY;
-						float tMaxZ = (nextVoxelZ - posZ) / dirZ;		
+						float tMaxX = dirX == 0f ? Float.POSITIVE_INFINITY : (nextVoxelX - posX) / dirX;
+						float tMaxY = dirY == 0f ? Float.POSITIVE_INFINITY : (nextVoxelY - posY) / dirY;
+						float tMaxZ = dirZ == 0f ? Float.POSITIVE_INFINITY : (nextVoxelZ - posZ) / dirZ;
 						float t = 0f;
 						
 						long lastSectionPos = Long.MAX_VALUE;
@@ -148,21 +146,17 @@ public class ImprovedExplosionDDA extends ExplosionBase {
 						boolean firstIteration = true;
 						
 						while (remainingLength > 0f) {
-							float travel = 0f;
+							float travel = 0.3f;
 							if (!firstIteration) {
 								float nextT = Math.min(tMaxX, Math.min(tMaxY, tMaxZ));
-
+								
 								if (tMaxX == nextT) {
 								    posX += stepX;
 								    tMaxX += deltaX;
-								}
-
-								if (tMaxY == nextT) {
+								} else if (tMaxY == nextT) {
 								    posY += stepY;
 								    tMaxY += deltaY;
-								}
-
-								if (tMaxZ == nextT) {
+								} else if (tMaxZ == nextT) {
 								    posZ += stepZ;
 								    tMaxZ += deltaZ;
 								}
@@ -170,10 +164,7 @@ public class ImprovedExplosionDDA extends ExplosionBase {
 								travel = nextT - t;
 								t = nextT;
 								remainingLength -= travel;
-								travel = Math.max(0.225f, travel);
-								if (t >= radius) {
-									break;
-								}
+								travel = Math.max(0.3f, travel);
 							}
 							firstIteration = false;
 							
@@ -206,7 +197,6 @@ public class ImprovedExplosionDDA extends ExplosionBase {
 									int chunkY = posY >> 4;
 									int chunkZ = posZ >> 4;
 									LevelChunkSection section = level.getChunk(chunkX, chunkZ).getSection(level.getSectionIndexFromSectionY(chunkY));
-									sectionAccessCount.increment(1);
 									if (section.hasOnlyAir()) {
 										emptySections.add(sectionPos);
 										currentSectionEmpty = true;
@@ -215,7 +205,7 @@ public class ImprovedExplosionDDA extends ExplosionBase {
 									float[] explosionResistances = new float[4096];
 									for (int i = 0; i < 4096; ++i) {
 										BlockState state = section.getBlockState(i >> 8, (i >> 4) & 15, i & 15);
-										explosionResistances[i] = Math.max(state.getBlock().getExplosionResistance(), state.getFluidState().getExplosionResistance()) * 0.167f;
+										explosionResistances[i] = state.isAir() ? 0f : (Math.max(state.getBlock().getExplosionResistance(), state.getFluidState().getExplosionResistance()) + 0.3f) * 0.3f;
 									}
 									sectionExplosionResistances.put(sectionPos, explosionResistances);
 									currentExplosionResistances = explosionResistances;
@@ -237,7 +227,7 @@ public class ImprovedExplosionDDA extends ExplosionBase {
 							if (currentEditedBlocks.nextClearBit(0) >= 4096) {
 								fullSections.add(sectionPos);
 								editedSections.remove(sectionPos);
-								//Required heap actually reduces here
+								currentSectionFull = true;
 								requiredHeapCache -= 560;
 							}
 							
@@ -248,22 +238,9 @@ public class ImprovedExplosionDDA extends ExplosionBase {
 			}
 		}
 		rayTracingTime.stopBenchmark();
-		for (int i = 0; i < fullSections.size(); i++) {
-			blockCount.increment(4096);
-			//We can do this here, since the count in this set never decreases
-			heapAllocationMB.increment(40);
-			maxRequiredHeapCache += 40;
-		}
-		for (int i = 0; i < emptySections.size(); i++) {
-			//We can do this here, since the count in this set never decreases
-			heapAllocationMB.increment(40);
-			maxRequiredHeapCache += 40;
-		}
-		for (int i = 0; i < sectionExplosionResistances.size(); i++) {
-			//We can do this here, since the count in this set never decreases
-			heapAllocationMB.increment(16432);
-			maxRequiredHeapCache += 16432;
-		}
+		blockCount.increment(4096 * fullSections.size());
+		heapAllocationMB.increment(40 * (fullSections.size() + emptySections.size()) + 16432 * sectionExplosionResistances.size());
+		maxRequiredHeapCache += 40 * (fullSections.size() + emptySections.size()) + 16432 * sectionExplosionResistances.size();
 		for (BitSet editedBlocks : editedSections.values()) {
 			blockCount.increment(editedBlocks);
 		}

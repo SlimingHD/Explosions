@@ -74,13 +74,13 @@ public class ExplosionProfiler {
 			stopTime = System.currentTimeMillis();
 		}
 		
-		public Counter addCounter(int initialValue) {
+		public Counter addCounter(long initialValue) {
 			Counter counter = new Counter(initialValue, v -> v);
 			counters.add(counter);
 			return counter;
 		}
 
-		public Counter addCounter(int initialValue, Function<Integer, Integer> printValueFunction) {
+		public Counter addCounter(long initialValue, Function<Long, Long> printValueFunction) {
 			Counter counter = new Counter(initialValue, printValueFunction);
 			counters.add(counter);
 			return counter;
@@ -89,20 +89,20 @@ public class ExplosionProfiler {
 	
 	public static class Counter {
 
-		private final Function<Integer, Integer> printValueFunction;
+		private final Function<Long, Long> printValueFunction;
 		
-		private int value;
+		private long value;
 		
-		public Counter(int value, Function<Integer, Integer> printValueFunction) {
+		public Counter(long value, Function<Long, Long> printValueFunction) {
 			this.printValueFunction = printValueFunction;
 			this.value = value;
 		}
 		
-		private int getPrintValue() {
+		private long getPrintValue() {
 			return printValueFunction.apply(value);
 		}
 		
-		public void increment(int amount) {
+		public void increment(long amount) {
 			value += amount;
 		}
 		
@@ -110,7 +110,7 @@ public class ExplosionProfiler {
 			value += amount.cardinality();
 		}
 		
-		public void decrement(int amount) {
+		public void decrement(long amount) {
 			value -= amount;
 		}
 		

@@ -64,10 +64,7 @@ public class ImprovedExplosionDDATask extends RecursiveTask<Long2ObjectMap<BitSe
 
 	@SuppressWarnings("deprecation")
 	private Long2ObjectMap<BitSet> calculate() {
-		int sectionAccessesCache = 0;
-		int heapAllocationCache = 0;
-		int requiredHeapCache = 0;
-		int maxRequiredHeapCache = 0;
+		long heapAllocationCache = 0;
 		
 		Long2ObjectMap<BitSet> editedSections = new Long2ObjectOpenHashMap<BitSet>();
 		int minBuildHeight = level.getMinBuildHeight();
@@ -81,22 +78,22 @@ public class ImprovedExplosionDDATask extends RecursiveTask<Long2ObjectMap<BitSe
 			int stepX = dirX > 0 ? 1 : -1;
 			int stepY = dirY > 0 ? 1 : -1;
 			int stepZ = dirZ > 0 ? 1 : -1;
-			
-			float deltaX = Math.abs(1f / dirX);
-			float deltaY = Math.abs(1f / dirY);
-			float deltaZ = Math.abs(1f / dirZ);
+
+			float deltaX = dirX == 0f ? Float.POSITIVE_INFINITY : Math.abs(1f / dirX);
+			float deltaY = dirY == 0f ? Float.POSITIVE_INFINITY : Math.abs(1f / dirY);
+			float deltaZ = dirZ == 0f ? Float.POSITIVE_INFINITY : Math.abs(1f / dirZ);
 
 			int posX = pos.getX();
 			int posY = pos.getY();
 			int posZ = pos.getZ();
+
+			float nextVoxelX = stepX > 0 ? posX + 1 : posX - 1;
+			float nextVoxelY = stepY > 0 ? posY + 1 : posY - 1;
+			float nextVoxelZ = stepZ > 0 ? posZ + 1 : posZ - 1;
 			
-			float nextVoxelX = stepX > 0 ? posX + 1 : posX;
-			float nextVoxelY = stepY > 0 ? posY + 1 : posY;
-			float nextVoxelZ = stepZ > 0 ? posZ + 1 : posZ;
-			
-			float tMaxX = (nextVoxelX - posX) / dirX;
-			float tMaxY = (nextVoxelY - posY) / dirY;
-			float tMaxZ = (nextVoxelZ - posZ) / dirZ;
+			float tMaxX = dirX == 0f ? Float.POSITIVE_INFINITY : (nextVoxelX - posX) / dirX;
+			float tMaxY = dirY == 0f ? Float.POSITIVE_INFINITY : (nextVoxelY - posY) / dirY;
+			float tMaxZ = dirZ == 0f ? Float.POSITIVE_INFINITY : (nextVoxelZ - posZ) / dirZ;
 			float t = 0f;
 			
 			long lastSectionPos = Long.MAX_VALUE;
@@ -109,21 +106,17 @@ public class ImprovedExplosionDDATask extends RecursiveTask<Long2ObjectMap<BitSe
 			boolean firstIteration = true;
 			
 			while (remainingLength > 0f) {
-				float travel = 0f;
+				float travel = 0.3f;
 				if (!firstIteration) {
 					float nextT = Math.min(tMaxX, Math.min(tMaxY, tMaxZ));
 
 					if (tMaxX == nextT) {
 					    posX += stepX;
 					    tMaxX += deltaX;
-					}
-
-					if (tMaxY == nextT) {
+					} else if (tMaxY == nextT) {
 					    posY += stepY;
 					    tMaxY += deltaY;
-					}
-
-					if (tMaxZ == nextT) {
+					} else if (tMaxZ == nextT) {
 					    posZ += stepZ;
 					    tMaxZ += deltaZ;
 					}
@@ -131,7 +124,7 @@ public class ImprovedExplosionDDATask extends RecursiveTask<Long2ObjectMap<BitSe
 					travel = nextT - t;
 					t = nextT;
 					remainingLength -= travel;
-					travel = Math.max(0.225f, travel);
+					travel = Math.max(0.3f, travel);
 				}
 				firstIteration = false;
 				
@@ -142,6 +135,7 @@ public class ImprovedExplosionDDATask extends RecursiveTask<Long2ObjectMap<BitSe
 				int blockIndex = ((posX & 15) << 8) | ((posY & 15) << 4) | (posZ & 15);
 					
 				if ((sectionPos == lastSectionPos && currentSectionEmpty) || explosionThread.emptySections.contains(sectionPos)) {
+					remainingLength -= currentExplosionResistances[blockIndex] * travel;
 					currentSectionEmpty = true;
 					continue;
 				}
@@ -164,7 +158,6 @@ public class ImprovedExplosionDDATask extends RecursiveTask<Long2ObjectMap<BitSe
 						int chunkY = posY >> 4;
 						int chunkZ = posZ >> 4;
 						LevelChunkSection section = level.getChunk(chunkX, chunkZ).getSection(level.getSectionIndexFromSectionY(chunkY));
-						sectionAccessesCache++;
 						if (section.hasOnlyAir()) {
 							explosionThread.emptySections.add(sectionPos);
 							currentSectionEmpty = true;
@@ -174,7 +167,7 @@ public class ImprovedExplosionDDATask extends RecursiveTask<Long2ObjectMap<BitSe
 							float[] explosionResistances = new float[4096];
 							for (int i = 0; i < 4096; ++i) {
 								BlockState state = section.getBlockState(i >> 8, (i >> 4) & 15, i & 15);
-								explosionResistances[i] = Math.max(state.getBlock().getExplosionResistance(), state.getFluidState().getExplosionResistance()) * 0.167f;
+								explosionResistances[i] = state.isAir() ? 0f : (Math.max(state.getBlock().getExplosionResistance(), state.getFluidState().getExplosionResistance()) + 0.3f) * 0.3f;
 							}
 							return explosionResistances;
 						});
@@ -183,8 +176,8 @@ public class ImprovedExplosionDDATask extends RecursiveTask<Long2ObjectMap<BitSe
 					if (currentEditedBlocks == null) {
 						editedSections.put(sectionPos, currentEditedBlocks = new BitSet(4096));
 						heapAllocationCache += 560;
-						requiredHeapCache += 560;
-						maxRequiredHeapCache = Math.max(requiredHeapCache, maxRequiredHeapCache);
+						long currentRequired = explosionThread.requiredHeapCache.addAndGet(560);
+						explosionThread.maxRequiredHeapCache.accumulateAndGet(currentRequired, Math::max);
 					}
 				}
 				
@@ -196,16 +189,14 @@ public class ImprovedExplosionDDATask extends RecursiveTask<Long2ObjectMap<BitSe
 				if (currentEditedBlocks.nextClearBit(0) >= 4096) {
 					explosionThread.fullSections.add(sectionPos);
 					editedSections.remove(sectionPos);
-					//Required heap actually reduces here
-					requiredHeapCache -= 560;
+					currentSectionFull = true;
+					explosionThread.requiredHeapCache.addAndGet(-560);
 				}
 				
 				lastSectionPos = sectionPos;
 			}
 		}
-		explosionThread.sectionAccessesCache.addAndGet(sectionAccessesCache);
 		explosionThread.heapAllocationCache.addAndGet(heapAllocationCache);
-		explosionThread.maxRequiredHeapCache.accumulateAndGet(maxRequiredHeapCache, Math::max);
 		return editedSections;
 	}
 }
