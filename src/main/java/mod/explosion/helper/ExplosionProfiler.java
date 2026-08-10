@@ -85,6 +85,10 @@ public class ExplosionProfiler {
 			counters.add(counter);
 			return counter;
 		}
+		
+		public Counter getCounter(int index) {
+			return counters.get(index);
+		}
 	}
 	
 	public static class Counter {

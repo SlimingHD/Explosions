@@ -5,6 +5,7 @@
 	"explosions.benchmark.heap_allocations": "Estimated heap allocations: %2$sMB, Peak: %3$sMB",
 	"explosions.benchmark.ray_creation_time": "Time for creation of rays: %1$ss",
 	"explosions.benchmark.cpu": "CPU tasks used: %2$s",
+	"explosions.benchmark.precomputation_time": "Time spent for precomputing %2$s sections: %1$ss",
 	
 	"explosions.benchmark.half_cube": "Half Cube Simple Explosion",
 	"explosions.benchmark.cube": "Cube Simple Explosion",
@@ -17,5 +18,11 @@
 	"explosions.benchmark.improved_explosion_ray_reduced_multithreaded": "Improved Explosion Ray Reduced Multithreaded",
 	"explosions.benchmark.improved_explosion_dda_multithreaded": "Improved Explosion DDA Multithreaded",
 	"explosions.benchmark.map_unwrapped_explosion_multithreaded": "Map Unwrapped Explosion Multithreaded",
-	"explosions.benchmark.semi_unwrapped_explosion_multithreaded": "Semi Unwrapped Explosion Multithreaded"
+	"explosions.benchmark.semi_unwrapped_explosion_multithreaded": "Semi Unwrapped Explosion Multithreaded",
+	"explosions.benchmark.morton_explosion": "Morton Encoded Explosion",
+	"explosions.benchmark.morton_semi_unwrapped_explosion_multithreaded": "Morton Encoded Semi Unwrapped Explosion Multithreaded",
+	"explosions.benchmark.precomputed_explosion": "Precomputed Sections Explosion",
+	"explosions.benchmark.precomputed_explosion_multithreaded": "Precomputed Sections Explosion Multithreaded",
+	"explosions.benchmark.memory_reduced_explosion": "Memory Reduced Explosion",
+	"explosions.benchmark.memory_reduced_explosion_multithreaded": "Memory Reduced Explosion Multithreaded"
 }

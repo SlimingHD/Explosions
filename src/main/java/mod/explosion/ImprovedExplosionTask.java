@@ -24,10 +24,10 @@ public class ImprovedExplosionTask extends RecursiveTask<Long2ObjectMap<BitSet>>
 	private final int radius;
 	private final float randomVectorLength;
 	private final boolean reducedRays;
-	private final int minTaskSize;
+	private final int maxTaskSize;
 	private final RandomSource random;
 	
-	ImprovedExplosionTask(ImprovedExplosionThread explosionThread, List<Vec3i> rays, ServerLevel level, BlockPos pos, int radius, float randomVectorLength, boolean reducedRays, int minTaskSize) {
+	ImprovedExplosionTask(ImprovedExplosionThread explosionThread, List<Vec3i> rays, ServerLevel level, BlockPos pos, int radius, float randomVectorLength, boolean reducedRays, int maxTaskSize) {
 		this.explosionThread = explosionThread;
 		this.rays = rays;
 		this.level = level;
@@ -35,16 +35,16 @@ public class ImprovedExplosionTask extends RecursiveTask<Long2ObjectMap<BitSet>>
 		this.radius = radius;
 		this.randomVectorLength = randomVectorLength;
 		this.reducedRays = reducedRays;
-		this.minTaskSize = minTaskSize;
+		this.maxTaskSize = maxTaskSize;
 		this.random = RandomSource.create(0);
 		explosionThread.taskCount++;
 	}
 
 	@Override
 	protected Long2ObjectMap<BitSet> compute() {
-		if (rays.size() > minTaskSize) {
-			ImprovedExplosionTask task1 = new ImprovedExplosionTask(explosionThread, rays.subList(0, rays.size() / 2), level, pos, radius, randomVectorLength, reducedRays, minTaskSize);
-			ImprovedExplosionTask task2 = new ImprovedExplosionTask(explosionThread, rays.subList(rays.size() / 2, rays.size()), level, pos, radius, randomVectorLength, reducedRays, minTaskSize);
+		if (rays.size() > maxTaskSize) {
+			ImprovedExplosionTask task1 = new ImprovedExplosionTask(explosionThread, rays.subList(0, rays.size() / 2), level, pos, radius, randomVectorLength, reducedRays, maxTaskSize);
+			ImprovedExplosionTask task2 = new ImprovedExplosionTask(explosionThread, rays.subList(rays.size() / 2, rays.size()), level, pos, radius, randomVectorLength, reducedRays, maxTaskSize);
 			task2.fork();
 			Long2ObjectMap<BitSet> toMergeBitSets = task1.compute();
 			Long2ObjectMap<BitSet> resultBitSets = task2.join();

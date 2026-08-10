@@ -28,11 +28,12 @@ public class SemiUnwrappedExplosion extends ExplosionBase {
 		profiler.setTitle("explosions.benchmark.semi_unwrapped_explosion_multithreaded");
 		Profile totalTime = profiler.createProfile("explosions.benchmark.total_time");
 		Profile rayTracingTime = profiler.createProfile("explosions.benchmark.ray_tracing_time");
+		Counter rayCount = rayTracingTime.addCounter(0);
 		Profile rayCreationTime = profiler.createProfile("explosions.benchmark.ray_creation_time");
 		
 		totalTime.startBenchmark();
 		rayCreationTime.startBenchmark();
-		int maxRaysPerThread = 25000;
+		int maxRaysPerTask = 25000;
 		int minBuildHeight = level.getMinBuildHeight();
 		int maxBuildHeight = level.getMaxBuildHeight();
 		int minRadiusY = Math.max(-radius, minBuildHeight - pos.getY());
@@ -41,16 +42,16 @@ public class SemiUnwrappedExplosion extends ExplosionBase {
 		boolean clippedTop = maxRadiusY < radius;
 		List<int[]> rays = new ArrayList<int[]>();
 		int rayIndex = 0;
-		int[] currentRays = new int[maxRaysPerThread * 3];
+		int[] currentRays = new int[maxRaysPerTask * 3];
 		for (int x = -radius; x <= radius; ++x) {
 			for (int y = minRadiusY; y <= maxRadiusY; ++y) {
 				for (int z = -radius; z <= radius; ++z) {
 					float distanceSqr = x * x + y * y + z * z;
 					if ((distanceSqr >= radius * radius && distanceSqr <= (radius + 1) * (radius + 1))
 							|| (((clippedBottom && y == minRadiusY) || (clippedTop && y == maxRadiusY)) && distanceSqr <= (radius + 1) * (radius + 1))) {
-						if (rayIndex == maxRaysPerThread * 3) {
+						if (rayIndex == maxRaysPerTask * 3) {
 							rays.add(currentRays);
-							currentRays = new int[maxRaysPerThread * 3];
+							currentRays = new int[maxRaysPerTask * 3];
 							rayIndex = 0;
 						}
 						currentRays[rayIndex] = x;
@@ -61,12 +62,11 @@ public class SemiUnwrappedExplosion extends ExplosionBase {
 				}
 			}
 		}
-		Counter rayCounter = rayTracingTime.addCounter(0);
 		int[] repairedRays = Arrays.copyOf(currentRays, rayIndex);
 		rays.add(repairedRays);
 		rayCreationTime.stopBenchmark();
 		for (int[] raySet : rays) {
-			rayCounter.increment(raySet.length / 3);
+			rayCount.increment(raySet.length / 3);
 		}
 
 		rayTracingTime.startBenchmark();

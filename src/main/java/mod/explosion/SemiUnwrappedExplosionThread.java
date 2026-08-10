@@ -16,7 +16,7 @@ import net.minecraft.util.Mth;
 
 public class SemiUnwrappedExplosionThread extends Thread {
 
-	private static final int minRaySetsPerTask = 1;
+	private static final int maxRaySetsPerTask = 1;
 	private static final ForkJoinPool pool = ImprovedExplosionThread.pool;
 	
 	private final ExplosionBase explosion;
@@ -30,7 +30,6 @@ public class SemiUnwrappedExplosionThread extends Thread {
 	public final Profile totalTime;
 	public final Counter blockCount;
 	public final Profile rayTracingTime;
-	public final Counter sectionAccessCount;
 	public final Counter heapAllocationMB;
 	public final Counter requiredHeapAllocationMB;
 	public final Profile cpu;
@@ -58,8 +57,6 @@ public class SemiUnwrappedExplosionThread extends Thread {
 		totalTime = explosion.profiler.getProfile(0);
 		blockCount = totalTime.addCounter(0);
 		rayTracingTime = explosion.profiler.getProfile(1);
-		Profile sectionAccesses = explosion.profiler.createProfile("explosions.benchmark.section_accesses");
-		sectionAccessCount = sectionAccesses.addCounter(0);
 		Profile heapAllocations = explosion.profiler.createProfile("explosions.benchmark.heap_allocations");
 		heapAllocationMB = heapAllocations.addCounter(0, v -> v / 1048576);
 		requiredHeapAllocationMB = heapAllocations.addCounter(0, v -> v / 1048576);
@@ -83,23 +80,31 @@ public class SemiUnwrappedExplosionThread extends Thread {
 		emptySections = new ConcurrentBitSet(arraySize);
 		fullSections = new ConcurrentBitSet(arraySize);
 		
-		heapAllocationMB.increment(arraySize * 12 + arraySize / 32);
-		requiredHeapAllocationMB.increment(arraySize * 12 + arraySize / 32);
+		heapAllocationMB.increment(arraySize * 12 + arraySize / 4);
+		requiredHeapAllocationMB.increment(arraySize * 12 + arraySize / 4);
 	}
 	
 	@Override
 	public void run() {
-		editedSections = pool.invoke(new SemiUnwrappedExplosionTask(this, rays, explosion.level, pos, radius, randomVectorLength, maxReachSection, maxReachSectionY, Math.max(minRaySetsPerTask, rays.size() / (Runtime.getRuntime().availableProcessors() * 4))));
+		editedSections = pool.invoke(new SemiUnwrappedExplosionTask(this, rays, explosion.level, pos, radius, randomVectorLength, maxReachSection, maxReachSectionY, Math.max(maxRaySetsPerTask, rays.size() / (Runtime.getRuntime().availableProcessors() * 4))));
 		rayTracingTime.stopBenchmark();
 		long maxRequiredHeapCache = this.maxRequiredHeapCache.get();
-		blockCount.increment(4096 * fullSections.size());
-		heapAllocationMB.increment(40 * (fullSections.size() + emptySections.size()) + 16432 * sectionExplosionResistances.size());
-		maxRequiredHeapCache += 40 * (fullSections.size() + emptySections.size()) + 16432 * sectionExplosionResistances.size();
-		heapAllocationMB.increment(heapAllocationCache.get());
+		for (int i = 0; i < fullSections.size(); i++) {
+			if (fullSections.get(i)) {
+				blockCount.increment(4096);
+			}
+		}
 		for (BitSet editedBlocks : editedSections.values()) {
 			blockCount.increment(editedBlocks);
 		}
-		heapAllocationMB.increment(heapAllocationCache.get());
+		heapAllocationMB.increment(fullSections.size() + emptySections.size());
+		maxRequiredHeapCache += fullSections.size() + emptySections.size();
+		for (int i = 0; i < sectionExplosionResistances.size(); i++) {
+			if (sectionExplosionResistances.get(i) != null) {
+				heapAllocationMB.increment(16432);
+				maxRequiredHeapCache += 16432;
+			}
+		}
 		cpuTaskCount.increment(taskCount);
 		requiredHeapAllocationMB.increment(maxRequiredHeapCache);
 	}

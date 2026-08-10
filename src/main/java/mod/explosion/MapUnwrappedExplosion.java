@@ -1,9 +1,7 @@
 package mod.explosion;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
-import java.util.List;
 
 import mod.explosion.helper.ExplosionProfiler.Counter;
 import mod.explosion.helper.ExplosionProfiler.Profile;
@@ -48,25 +46,28 @@ public class MapUnwrappedExplosion extends ExplosionBase {
 		
 		totalTime.startBenchmark();
 		rayCreationTime.startBenchmark();
-		int maxRaysPerThread = 25000;
+		int maxRaysPerTask = 25000;
 		int minBuildHeight = level.getMinBuildHeight();
 		int maxBuildHeight = level.getMaxBuildHeight();
 		int minRadiusY = Math.max(-radius, minBuildHeight - pos.getY());
 		int maxRadiusY = Math.min(radius, maxBuildHeight - pos.getY());
 		boolean clippedBottom = minRadiusY > -radius;
 		boolean clippedTop = maxRadiusY < radius;
-		List<int[]> rays = new ArrayList<int[]>();
 		int rayIndex = 0;
-		int[] currentRays = new int[maxRaysPerThread * 3];
+		int[] currentRays = new int[maxRaysPerTask * 3];
+		Counter rayCounter = rayTracingTime.addCounter(0);
+		MapUnwrappedExplosionThread thread = new MapUnwrappedExplosionThread(this, pos, radius, randomVectorLength);
+		
 		for (int x = -radius; x <= radius; ++x) {
 			for (int y = minRadiusY; y <= maxRadiusY; ++y) {
 				for (int z = -radius; z <= radius; ++z) {
 					float distanceSqr = x * x + y * y + z * z;
 					if ((distanceSqr >= radius * radius && distanceSqr <= (radius + 1) * (radius + 1))
 							|| (((clippedBottom && y == minRadiusY) || (clippedTop && y == maxRadiusY)) && distanceSqr <= (radius + 1) * (radius + 1))) {
-						if (rayIndex == maxRaysPerThread * 3) {
-							rays.add(currentRays);
-							currentRays = new int[maxRaysPerThread * 3];
+						if (rayIndex == maxRaysPerTask * 3) {
+							thread.submitRays(currentRays);
+							rayCounter.increment(currentRays.length / 3);
+							currentRays = new int[maxRaysPerTask * 3];
 							rayIndex = 0;
 						}
 						currentRays[rayIndex] = x;
@@ -77,16 +78,12 @@ public class MapUnwrappedExplosion extends ExplosionBase {
 				}
 			}
 		}
-		Counter rayCounter = rayTracingTime.addCounter(0);
 		int[] repairedRays = Arrays.copyOf(currentRays, rayIndex);
-		rays.add(repairedRays);
+		thread.submitRays(repairedRays);
 		rayCreationTime.stopBenchmark();
-		for (int[] raySet : rays) {
-			rayCounter.increment(raySet.length / 3);
-		}
+		rayCounter.increment(repairedRays.length / 3);
 
 		rayTracingTime.startBenchmark();
-		MapUnwrappedExplosionThread thread = new MapUnwrappedExplosionThread(this, rays, pos, radius, randomVectorLength);
 		MultithreadedExplosionHandler.enqueueMapUnwrapped(thread);
 	}
 	
@@ -119,8 +116,8 @@ public class MapUnwrappedExplosion extends ExplosionBase {
 		BitSet emptySections = new BitSet(arraySize);
 		BitSet fullSections = new BitSet(arraySize);
 		BitSet[] editedSections = new BitSet[arraySize];
-		heapAllocationMB.increment((arraySize) * 24 + (arraySize) / 32);
-		requiredHeapAllocationMB.increment((arraySize) * 24 + (arraySize) / 32);
+		heapAllocationMB.increment(arraySize * 24 + arraySize / 4);
+		requiredHeapAllocationMB.increment(arraySize * 24 + arraySize / 4);
 		int minRadiusY = Math.max(-radius, minBuildHeight - pos.getY());
 		int maxRadiusY = Math.min(radius, maxBuildHeight - pos.getY());
 		boolean clippedBottom = minRadiusY > -radius;

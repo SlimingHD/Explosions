@@ -23,10 +23,10 @@ public class SemiUnwrappedExplosionTask extends RecursiveTask<Int2ObjectMap<BitS
 	private final float randomVectorLength;
 	private final int maxReachSection;
 	private final int maxReachSectionY;
-	private final int minSizePerTask;
+	private final int maxTaskSize;
 	private final RandomSource random;
 	
-	public SemiUnwrappedExplosionTask(SemiUnwrappedExplosionThread explosionThread, List<int[]> rays, ServerLevel level, BlockPos pos, int radius, float randomVectorLength, int maxReachSection, int maxReachSectionY, int minSizePerTask) {
+	public SemiUnwrappedExplosionTask(SemiUnwrappedExplosionThread explosionThread, List<int[]> rays, ServerLevel level, BlockPos pos, int radius, float randomVectorLength, int maxReachSection, int maxReachSectionY, int maxTaskSize) {
 		this.explosionThread = explosionThread;
 		this.rays = rays;
 		this.level = level;
@@ -35,15 +35,15 @@ public class SemiUnwrappedExplosionTask extends RecursiveTask<Int2ObjectMap<BitS
 		this.randomVectorLength = randomVectorLength;
 		this.maxReachSection = maxReachSection;
 		this.maxReachSectionY = maxReachSectionY;
-		this.minSizePerTask = minSizePerTask;
+		this.maxTaskSize = maxTaskSize;
 		this.random = RandomSource.create(0);
 		explosionThread.taskCount++;
 	}
 	
 	public Int2ObjectMap<BitSet> compute() {
-		if (rays.size() > minSizePerTask) {
-			SemiUnwrappedExplosionTask task1 = new SemiUnwrappedExplosionTask(explosionThread, rays.subList(0, rays.size() / 2), level, pos, radius, randomVectorLength, maxReachSection, maxReachSectionY, minSizePerTask);
-			SemiUnwrappedExplosionTask task2 = new SemiUnwrappedExplosionTask(explosionThread, rays.subList(rays.size() / 2, rays.size()), level, pos, radius, randomVectorLength, maxReachSection, maxReachSectionY, minSizePerTask);
+		if (rays.size() > maxTaskSize) {
+			SemiUnwrappedExplosionTask task1 = new SemiUnwrappedExplosionTask(explosionThread, rays.subList(0, rays.size() / 2), level, pos, radius, randomVectorLength, maxReachSection, maxReachSectionY, maxTaskSize);
+			SemiUnwrappedExplosionTask task2 = new SemiUnwrappedExplosionTask(explosionThread, rays.subList(rays.size() / 2, rays.size()), level, pos, radius, randomVectorLength, maxReachSection, maxReachSectionY, maxTaskSize);
 			task2.fork();
 			Int2ObjectMap<BitSet> toMergeBitSets = task1.compute();
 			Int2ObjectMap<BitSet> resultBitSets = task2.join();

@@ -102,9 +102,7 @@ public abstract class ExplosionBase {
 	
 	public void finishExplosion(Map<Long, BitSet> editedSections, Set<Long> fullSections) {
 		Profile blockProfile = profiler.createProfile("explosions.benchmark.blocks_destroyed");
-		Counter blockCounter = blockProfile.addCounter(0); 
-
-		blockCounter.increment(4096 * fullSections.size());
+		Counter blockCounter = blockProfile.addCounter(0);
 		
 		HashMap<LevelChunk, BitSet> chunks = new HashMap<>();
 		Long2ObjectMap<LightUpdateHelper.LightDataHolder> dataLayerCache = new Long2ObjectOpenHashMap<>();
@@ -116,6 +114,9 @@ public abstract class ExplosionBase {
 			PalettedContainer<BlockState> states = section.getStates();
 			chunk.setLoaded(true);
 			for (int i = 0; i < 4096; i++) {
+				if (!states.get(i >> 8, (i >> 4) & 15, i & 15).isAir()) {
+					blockCounter.increment(1);
+				}
 				states.set(i >> 8, (i >> 4) & 15, i & 15, Blocks.AIR.defaultBlockState());
 			}
 			section.recalcBlockCounts();

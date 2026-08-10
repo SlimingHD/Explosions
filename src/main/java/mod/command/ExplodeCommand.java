@@ -5,14 +5,8 @@ import com.mojang.brigadier.arguments.FloatArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 
-import mod.explosion.ExplosionBase;
-import mod.explosion.ImprovedExplosion;
-import mod.explosion.ImprovedExplosionDDA;
-import mod.explosion.ImprovedExplosionRayReduced;
+import mod.explosion.*;
 import mod.explosion.ImprovedExplosionRayReduced.RayReduction;
-import mod.explosion.MapUnwrappedExplosion;
-import mod.explosion.SemiUnwrappedExplosion;
-import mod.explosion.SimpleExplosion;
 import mod.explosion.SimpleExplosion.Shape;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -72,7 +66,13 @@ public class ExplodeCommand {
 		DDA_MULTITHREADED((level, pos, radius, randomVectorLength) -> new ImprovedExplosionDDA(level, pos, radius, randomVectorLength, true)),
 		MAP_UNWRAPPED((level, pos, radius, randomVectorLength) -> new MapUnwrappedExplosion(level, pos, radius, randomVectorLength, false)),
 		MAP_UNWRAPPED_MULTITHREADED((level, pos, radius, randomVectorLength) -> new MapUnwrappedExplosion(level, pos, radius, randomVectorLength, true)),
-		SEMI_UNWRAPPED_MULTITHREADED((level, pos, radius, randomVectorLength) -> new SemiUnwrappedExplosion(level, pos, radius, randomVectorLength));
+		SEMI_UNWRAPPED_MULTITHREADED((level, pos, radius, randomVectorLength) -> new SemiUnwrappedExplosion(level, pos, radius, randomVectorLength)),
+		MORTON((level, pos, radius, randomVectorLength) -> new MortonExplosion(level, pos, radius, randomVectorLength, false)),
+		MORTON_SEMI_UNWRAPPED_MULTITHREADED((level, pos, radius, randomVectorLength) -> new MortonExplosion(level, pos, radius, randomVectorLength, true)),
+		PRECOMPUTED((level, pos, radius, randomVectorLength) -> new PrecomputedExplosion(level, pos, radius, randomVectorLength, false)),
+		PRECOMPUTED_MULTITHREADED((level, pos, radius, randomVectorLength) -> new PrecomputedExplosion(level, pos, radius, randomVectorLength, true)),
+		MEMORY_REDUCED((level, pos, radius, randomVectorLength) -> new MemoryReducedExplosion(level, pos, radius, randomVectorLength, false)),
+		MEMORY_REDUCED_MULTITHREADED((level, pos, radius, randomVectorLength) -> new MemoryReducedExplosion(level, pos, radius, randomVectorLength, true));
 		
 		private final ExplosionFunction explosionFunction;
 		

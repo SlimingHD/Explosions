@@ -16,7 +16,7 @@ import net.minecraft.core.Vec3i;
 
 public final class ImprovedExplosionThread extends Thread {
 
-	private static final int minVectorsPerThread = 25000;
+	private static final int maxRaysPerTask = 25000;
 	protected static final ForkJoinPool pool = new ForkJoinPool();
 	
 	private final ExplosionBase explosion;
@@ -71,21 +71,21 @@ public final class ImprovedExplosionThread extends Thread {
 	@Override
 	public void run() {
 		if (dda) {
-			ImprovedExplosionDDATask task = new ImprovedExplosionDDATask(this, rays, explosion.level, pos, radius, randomVectorLength, Math.max(minVectorsPerThread, rays.size() / (Runtime.getRuntime().availableProcessors() * 4)));
+			ImprovedExplosionDDATask task = new ImprovedExplosionDDATask(this, rays, explosion.level, pos, radius, randomVectorLength, Math.max(maxRaysPerTask, rays.size() / (Runtime.getRuntime().availableProcessors() * 4)));
 			editedSections = pool.invoke(task);
 		} else {
-			ImprovedExplosionTask task = new ImprovedExplosionTask(this, rays, explosion.level, pos, radius, randomVectorLength, reducedRays, Math.max(minVectorsPerThread, rays.size() / (Runtime.getRuntime().availableProcessors() * 4)));
+			ImprovedExplosionTask task = new ImprovedExplosionTask(this, rays, explosion.level, pos, radius, randomVectorLength, reducedRays, Math.max(maxRaysPerTask, rays.size() / (Runtime.getRuntime().availableProcessors() * 4)));
 			editedSections = pool.invoke(task);
 		}
 		rayTracingTime.stopBenchmark();
 		long maxRequiredHeapCache = this.maxRequiredHeapCache.get();
 		blockCount.increment(4096 * fullSections.size());
-		heapAllocationMB.increment(40 * (fullSections.size() + emptySections.size()) + 16432 * sectionExplosionResistances.size());
-		maxRequiredHeapCache += 40 * (fullSections.size() + emptySections.size()) + 16432 * sectionExplosionResistances.size();
-		heapAllocationMB.increment(heapAllocationCache.get());
 		for (BitSet editedBlocks : editedSections.values()) {
 			blockCount.increment(editedBlocks);
 		}
+		heapAllocationMB.increment(40 * (fullSections.size() + emptySections.size()) + 16432 * sectionExplosionResistances.size());
+		maxRequiredHeapCache += 40 * (fullSections.size() + emptySections.size()) + 16432 * sectionExplosionResistances.size();
+		heapAllocationMB.increment(heapAllocationCache.get());
 		cpuTaskCount.increment(taskCount);
 		requiredHeapAllocationMB.increment(maxRequiredHeapCache);
 	}

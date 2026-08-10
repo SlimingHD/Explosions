@@ -1,6 +1,5 @@
 package mod.explosion;
 
-import java.util.List;
 import java.util.concurrent.RecursiveTask;
 
 import mod.explosion.helper.ConcurrentBitSet;
@@ -14,7 +13,7 @@ import net.minecraft.world.level.chunk.LevelChunkSection;
 public class MapUnwrappedExplosionTask extends RecursiveTask<Void> {
 	
 	private final MapUnwrappedExplosionThread explosionThread;
-	private final List<int[]> rays;
+	private final int[] rays;
 	private final ServerLevel level;
 	private final BlockPos pos;
 	private final int radius;
@@ -23,7 +22,7 @@ public class MapUnwrappedExplosionTask extends RecursiveTask<Void> {
 	private final int maxReachSectionY;
 	private final RandomSource random;
 	
-	public MapUnwrappedExplosionTask(MapUnwrappedExplosionThread explosionThread, List<int[]> rays, ServerLevel level, BlockPos pos, int radius, float randomVectorLength, int maxReachSection, int maxReachSectionY) {
+	public MapUnwrappedExplosionTask(MapUnwrappedExplosionThread explosionThread, int[] rays, ServerLevel level, BlockPos pos, int radius, float randomVectorLength, int maxReachSection, int maxReachSectionY) {
 		this.explosionThread = explosionThread;
 		this.rays = rays;
 		this.level = level;
@@ -37,15 +36,7 @@ public class MapUnwrappedExplosionTask extends RecursiveTask<Void> {
 	}
 	
 	public Void compute() {
-		if (rays.size() > 1) {
-			MapUnwrappedExplosionTask task1 = new MapUnwrappedExplosionTask(explosionThread, rays.subList(0, rays.size() / 2), level, pos, radius, randomVectorLength, maxReachSection, maxReachSectionY);
-			MapUnwrappedExplosionTask task2 = new MapUnwrappedExplosionTask(explosionThread, rays.subList(rays.size() / 2, rays.size()), level, pos, radius, randomVectorLength, maxReachSection, maxReachSectionY);
-			task2.fork();
-			task1.compute();
-			task2.join();
-		} else {
-			calculate();
-		}
+		calculate();
 		return null;
 	}
 	
@@ -60,12 +51,10 @@ public class MapUnwrappedExplosionTask extends RecursiveTask<Void> {
 		int centerY = pos.getY() >> 4;
 		int centerZ = pos.getZ() >> 4;
 		
-		int[] raySet = rays.get(0);
-		
-		for (int ray = 0; ray < raySet.length; ray += 3) {
-			int rayX = raySet[ray];
-			int rayY = raySet[ray + 1];
-			int rayZ = raySet[ray + 2];
+		for (int ray = 0; ray < rays.length; ray += 3) {
+			int rayX = rays[ray];
+			int rayY = rays[ray + 1];
+			int rayZ = rays[ray + 2];
 			float length = Mth.sqrt(rayX * rayX + rayY * rayY + rayZ * rayZ);
 			float dirX = rayX / length;
 			float dirY = rayY / length;

@@ -23,26 +23,26 @@ public class ImprovedExplosionDDATask extends RecursiveTask<Long2ObjectMap<BitSe
 	private final BlockPos pos;
 	private final int radius;
 	private final float randomVectorLength;
-	private final int minTaskSize;
+	private final int maxTaskSize;
 	private final RandomSource random;
 	
-	ImprovedExplosionDDATask(ImprovedExplosionThread explosionThread, List<Vec3i> rays, ServerLevel level, BlockPos pos, int radius, float randomVectorLength, int minTaskSize) {
+	ImprovedExplosionDDATask(ImprovedExplosionThread explosionThread, List<Vec3i> rays, ServerLevel level, BlockPos pos, int radius, float randomVectorLength, int maxTaskSize) {
 		this.explosionThread = explosionThread;
 		this.rays = rays;
 		this.level = level;
 		this.pos = pos;
 		this.radius = radius;
 		this.randomVectorLength = randomVectorLength;
-		this.minTaskSize = minTaskSize;
+		this.maxTaskSize = maxTaskSize;
 		this.random = RandomSource.create(0);
 		explosionThread.taskCount++;
 	}
 
 	@Override
 	protected Long2ObjectMap<BitSet> compute() {
-		if (rays.size() > minTaskSize) {
-			ImprovedExplosionDDATask task1 = new ImprovedExplosionDDATask(explosionThread, rays.subList(0, rays.size() / 2), level, pos, radius, randomVectorLength, minTaskSize);
-			ImprovedExplosionDDATask task2 = new ImprovedExplosionDDATask(explosionThread, rays.subList(rays.size() / 2, rays.size()), level, pos, radius, randomVectorLength, minTaskSize);
+		if (rays.size() > maxTaskSize) {
+			ImprovedExplosionDDATask task1 = new ImprovedExplosionDDATask(explosionThread, rays.subList(0, rays.size() / 2), level, pos, radius, randomVectorLength, maxTaskSize);
+			ImprovedExplosionDDATask task2 = new ImprovedExplosionDDATask(explosionThread, rays.subList(rays.size() / 2, rays.size()), level, pos, radius, randomVectorLength, maxTaskSize);
 			task2.fork();
 			Long2ObjectMap<BitSet> toMergeBitSets = task1.compute();
 			Long2ObjectMap<BitSet> resultBitSets = task2.join();
@@ -135,7 +135,6 @@ public class ImprovedExplosionDDATask extends RecursiveTask<Long2ObjectMap<BitSe
 				int blockIndex = ((posX & 15) << 8) | ((posY & 15) << 4) | (posZ & 15);
 					
 				if ((sectionPos == lastSectionPos && currentSectionEmpty) || explosionThread.emptySections.contains(sectionPos)) {
-					remainingLength -= currentExplosionResistances[blockIndex] * travel;
 					currentSectionEmpty = true;
 					continue;
 				}
