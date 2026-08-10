@@ -144,7 +144,7 @@ public class PrecomputedExplosionTask extends RecursiveTask<Int2ObjectMap<BitSet
 					int sectionIndex = ((posX >> 4) - centerX + maxReachSection / 2) * maxReachSection * maxReachSectionY + ((posY >> 4) - centerY + maxReachSectionY / 2) * maxReachSection + (posZ >> 4) - centerZ + maxReachSection / 2;
 					int blockIndex = ((posX & 15) << 8) | ((posY & 15) << 4) | (posZ & 15);
 					
-					if (currentExplosionResistances != null && currentExplosionResistances.isEmpty()) {
+					if (sectionIndex == lastSectionIndex && currentExplosionResistances != null && currentExplosionResistances.isEmpty()) {
 						continue;
 					}
 					if (sectionIndex == lastSectionIndex && currentSectionFull) {

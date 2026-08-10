@@ -106,6 +106,10 @@ public class ExplosionProfiler {
 			return printValueFunction.apply(value);
 		}
 		
+		public long getValue() {
+			return value;
+		}
+		
 		public void increment(long amount) {
 			value += amount;
 		}

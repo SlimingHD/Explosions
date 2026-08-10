@@ -6,6 +6,7 @@
 	"explosions.benchmark.ray_creation_time": "Time for creation of rays: %1$ss",
 	"explosions.benchmark.cpu": "CPU tasks used: %2$s",
 	"explosions.benchmark.precomputation_time": "Time spent for precomputing %2$s sections: %1$ss",
+	"explosions.benchmark.section_resistance_bit_count": "Average storage bits per section with resistances: %3$s",
 	
 	"explosions.benchmark.half_cube": "Half Cube Simple Explosion",
 	"explosions.benchmark.cube": "Cube Simple Explosion",

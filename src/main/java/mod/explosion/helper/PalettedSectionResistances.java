@@ -83,6 +83,10 @@ public class PalettedSectionResistances {
 	}
 	
 	public long getByteSize() {
-		return resistancePalette != null ? resistancePalette.length * 4 + indices.length * 4 : 16432;
+		return resistancePalette != null ? resistancePalette.length * 4 + indices.length * 4 : isEmpty() ? 0 : 16432;
+	}
+	
+	public int getBitCount() {
+		return storageBits;
 	}
 }

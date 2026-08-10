@@ -104,6 +104,9 @@ public class MemoryReducedExplosion extends ExplosionBase {
 		Profile heapAllocations = profiler.createProfile("explosions.benchmark.heap_allocations");
 		Counter heapAllocationMB = heapAllocations.addCounter(0, v -> v / 1048576);
 		Counter requiredHeapAllocationMB = heapAllocations.addCounter(0, v -> v / 1048576);
+		Profile sectionResistanceBitCount = profiler.createProfile("explosions.benchmark.section_resistance_bit_count");
+		Counter sectionCount = sectionResistanceBitCount.addCounter(0);
+		Counter averageBitCount = sectionResistanceBitCount.addCounter(0, v -> sectionCount.getValue() == 0 ? 0 : v / sectionCount.getValue());
 		
 		long maxRequiredHeapCache = 0;
 		long requiredHeapCache = 0;
@@ -205,7 +208,7 @@ public class MemoryReducedExplosion extends ExplosionBase {
 
 							int sectionIndex = ((posX >> 4) - centerX + maxReachSection / 2) * maxReachSection * maxReachSectionY + ((posY >> 4) - centerY + maxReachSectionY / 2) * maxReachSection + (posZ >> 4) - centerZ + maxReachSection / 2;
 							int blockIndex = ((posX & 15) << 8) | ((posY & 15) << 4) | (posZ & 15);
-							if (currentExplosionResistances != null && currentExplosionResistances.isEmpty()) {
+							if (sectionIndex == lastSectionIndex && currentExplosionResistances != null && currentExplosionResistances.isEmpty()) {
 								continue;
 							}
 							if (fullSections.get(sectionIndex)) {
@@ -241,6 +244,8 @@ public class MemoryReducedExplosion extends ExplosionBase {
 										}
 									}
 									currentExplosionResistances = sectionExplosionResistances[sectionIndex] = new PalettedSectionResistances(resistances, indices);
+									averageBitCount.increment(currentExplosionResistances.getBitCount());
+									sectionCount.increment(1);
 								} else if (currentExplosionResistances.isEmpty()) {
 									continue;
 								}
