@@ -21,7 +21,7 @@
 	"explosions.benchmark.map_unwrapped_explosion_multithreaded": "Map Unwrapped Explosion Multithreaded",
 	"explosions.benchmark.semi_unwrapped_explosion_multithreaded": "Semi Unwrapped Explosion Multithreaded",
 	"explosions.benchmark.morton_explosion": "Morton Encoded Explosion",
-	"explosions.benchmark.morton_semi_unwrapped_explosion_multithreaded": "Morton Encoded Semi Unwrapped Explosion Multithreaded",
+	"explosions.benchmark.morton_semi_unwrapped_explosion_multithreaded": "Morton Encoded Explosion Multithreaded",
 	"explosions.benchmark.precomputed_explosion": "Precomputed Sections Explosion",
 	"explosions.benchmark.precomputed_explosion_multithreaded": "Precomputed Sections Explosion Multithreaded",
 	"explosions.benchmark.memory_reduced_explosion": "Memory Reduced Explosion",

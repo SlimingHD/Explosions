@@ -3,10 +3,13 @@ package mod.explosion;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
-import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
-import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2LongMap;
 import it.unimi.dsi.fastutil.longs.LongList;
 import mod.explosion.helper.ConcurrentArray;
@@ -19,9 +22,8 @@ import net.minecraft.util.Mth;
 
 public class MortonExplosionThread extends Thread {
 
-	private static final int maxRaysPerTask = 50000;
-	private static final int maxRaySetsPerTask = 1;
-	private static final ForkJoinPool pool = ImprovedExplosionThread.pool;
+	private static final int maxRaysPerTask = 25000;
+	private static final ExecutorService pool = Executors.newCachedThreadPool();
 	
 	private final ExplosionBase explosion;
 	private final Long2LongMap rays;
@@ -44,14 +46,13 @@ public class MortonExplosionThread extends Thread {
 	public final AtomicLong heapAllocationCache = new AtomicLong();
 	public final AtomicLong requiredHeapCache = new AtomicLong();
 	public final AtomicLong maxRequiredHeapCache = new AtomicLong();
-	
+
 	public final ConcurrentArray<float[]> sectionExplosionResistances;
 	public final ConcurrentBitSet emptySections;
 	public final ConcurrentBitSet fullSections;
+	public final ConcurrentArray<ConcurrentBitSet> editedSections;
 	
-	private Int2ObjectMap<BitSet> editedSections;
-	
-	int taskCount = 0;
+	AtomicInteger taskCount = new AtomicInteger();
 	
 	MortonExplosionThread(ExplosionBase explosion, Long2LongMap rays, LongList rayOrder, int bitCount, BlockPos pos, int radius, float randomVectorLength) {
 		this.explosion = explosion;
@@ -88,14 +89,25 @@ public class MortonExplosionThread extends Thread {
 		sectionExplosionResistances = new ConcurrentArray<float[]>(arraySize);
 		emptySections = new ConcurrentBitSet(arraySize);
 		fullSections = new ConcurrentBitSet(arraySize);
+		editedSections = new ConcurrentArray<ConcurrentBitSet>(arraySize);
 		
-		heapAllocationMB.increment(arraySize * 12 + arraySize / 4);
-		requiredHeapAllocationMB.increment(arraySize * 12 + arraySize / 4);
+		heapAllocationMB.increment(arraySize * 8 + arraySize / 4);
+		requiredHeapAllocationMB.increment(arraySize * 8 + arraySize / 4);
 	}
 	
 	@Override
 	public void run() {
-		editedSections = pool.invoke(new MortonExplosionTask(this, rays, rayOrder, bitCount, explosion.level, pos, radius, randomVectorLength, maxReachSection, maxReachSectionY, Math.max(maxRaySetsPerTask, rayOrder.size() / (Runtime.getRuntime().availableProcessors() * 4))));
+		List<Future<?>> tasks = new ArrayList<Future<?>>();
+		for (long[] order : rayOrder) {
+			tasks.add(pool.submit(new MortonExplosionTask(this, rays, order, bitCount, explosion.level, pos, radius, randomVectorLength, maxReachSection, maxReachSectionY)));
+		}
+		for (Future<?> task : tasks) {
+			try {
+				task.get();
+			} catch (InterruptedException | ExecutionException e) {
+				e.printStackTrace();
+			}
+		}
 		rayTracingTime.stopBenchmark();
 		long maxRequiredHeapCache = this.maxRequiredHeapCache.get();
 		for (int i = 0; i < fullSections.size(); i++) {
@@ -103,22 +115,29 @@ public class MortonExplosionThread extends Thread {
 				blockCount.increment(4096);
 			}
 		}
-		heapAllocationMB.increment(fullSections.size() + emptySections.size());
-		maxRequiredHeapCache += fullSections.size() + emptySections.size();
-		for (int i = 0; i < sectionExplosionResistances.size(); i++) {
-			if (sectionExplosionResistances.get(i) != null) {
-				heapAllocationMB.increment(16432);
-				maxRequiredHeapCache += 16432;
+		for (int i = 0; i < editedSections.size(); i++) {
+			if (editedSections.get(i) != null) {
+				blockCount.increment(editedSections.get(i).toLegacyBitSet());
 			}
 		}
-		cpuTaskCount.increment(taskCount);
+		for (int i = 0; i < sectionExplosionResistances.size(); i++) {
+			if (sectionExplosionResistances.get(i) != null) {
+				//50 Bytes estimated CompletableFuture size
+				heapAllocationMB.increment(16482);
+				maxRequiredHeapCache += 16482;
+			}
+		}
+		cpuTaskCount.increment(taskCount.get());
 		requiredHeapAllocationMB.increment(maxRequiredHeapCache);
 	}
 
 	public BitSet[] getEditedSections() {
-		BitSet[] convertedEditedSections = new BitSet[maxReachSection * maxReachSection * maxReachSection];
-		for (int sectionIndex : editedSections.keySet()) {
-			convertedEditedSections[sectionIndex] = editedSections.get(sectionIndex);
+		BitSet[] convertedEditedSections = new BitSet[editedSections.size()];
+		for (int i = 0; i < convertedEditedSections.length; i++) {
+			ConcurrentBitSet editedBlocks = editedSections.get(i);
+			if (editedBlocks != null) {
+				convertedEditedSections[i] = editedSections.get(i).toLegacyBitSet();
+			}
 		}
 		return convertedEditedSections;
 	}

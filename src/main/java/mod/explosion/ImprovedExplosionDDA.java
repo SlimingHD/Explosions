@@ -10,6 +10,7 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import mod.explosion.helper.ExplosionProfiler.Counter;
 import mod.explosion.helper.ExplosionProfiler.Profile;
+import mod.explosion.ImprovedExplosionThread.Mode;
 import mod.explosion.helper.MultithreadedExplosionHandler;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
@@ -74,7 +75,7 @@ public class ImprovedExplosionDDA extends ExplosionBase {
 		rayTracingTime.addCounter(rays.size());
 
 		rayTracingTime.startBenchmark();
-		ImprovedExplosionThread explosionThread = new ImprovedExplosionThread(this, rays, pos, radius, randomVectorLength, false, true);
+		ImprovedExplosionThread explosionThread = new ImprovedExplosionThread(this, rays, pos, radius, randomVectorLength, Mode.DDA);
 		MultithreadedExplosionHandler.enqueue(explosionThread);
 	}
 	
@@ -164,7 +165,7 @@ public class ImprovedExplosionDDA extends ExplosionBase {
 								travel = nextT - t;
 								t = nextT;
 								remainingLength -= travel;
-								travel = Math.max(0.3f, travel);
+								travel = Math.max(0.1f, travel);
 							}
 							firstIteration = false;
 							

@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
@@ -16,7 +17,7 @@ import net.minecraft.core.Vec3i;
 
 public final class ImprovedExplosionThread extends Thread {
 
-	private static final int maxRaysPerTask = 25000;
+	private static final int minRaysPerTask = 25000;
 	protected static final ForkJoinPool pool = new ForkJoinPool();
 	
 	private final ExplosionBase explosion;
@@ -24,8 +25,7 @@ public final class ImprovedExplosionThread extends Thread {
 	private final BlockPos pos;
 	private final int radius;
 	private final float randomVectorLength;
-	private final boolean reducedRays;
-	private final boolean dda;
+	private final Mode mode;
 	
 	public final Profile totalTime;
 	public final Counter blockCount;
@@ -45,17 +45,16 @@ public final class ImprovedExplosionThread extends Thread {
 	
 	private Map<Long, BitSet> editedSections = new Long2ObjectOpenHashMap<BitSet>();
 	
-	int taskCount = 0;
+	AtomicInteger taskCount = new AtomicInteger();
 	
-	ImprovedExplosionThread(ExplosionBase explosion, List<Vec3i> rays, BlockPos pos, int radius, float randomVectorLength, boolean reducedRays, boolean dda) {
+	ImprovedExplosionThread(ExplosionBase explosion, List<Vec3i> rays, BlockPos pos, int radius, float randomVectorLength, Mode mode) {
 		this.explosion = explosion;
 		this.rays = rays;
 		this.pos = pos;
 		this.radius = radius;
 		this.randomVectorLength = randomVectorLength;
-		this.reducedRays = reducedRays;
-		this.dda = dda;
-		
+		this.mode = mode;
+
 		totalTime = explosion.profiler.getProfile(0);
 		blockCount = totalTime.addCounter(0);
 		rayTracingTime = explosion.profiler.getProfile(1);
@@ -70,11 +69,11 @@ public final class ImprovedExplosionThread extends Thread {
 	
 	@Override
 	public void run() {
-		if (dda) {
-			ImprovedExplosionDDATask task = new ImprovedExplosionDDATask(this, rays, explosion.level, pos, radius, randomVectorLength, Math.max(maxRaysPerTask, rays.size() / (Runtime.getRuntime().availableProcessors() * 4)));
+		if (mode == Mode.DDA) {
+			ImprovedExplosionDDATask task = new ImprovedExplosionDDATask(this, rays, explosion.level, pos, radius, randomVectorLength, minRaysPerTask);
 			editedSections = pool.invoke(task);
 		} else {
-			ImprovedExplosionTask task = new ImprovedExplosionTask(this, rays, explosion.level, pos, radius, randomVectorLength, reducedRays, Math.max(maxRaysPerTask, rays.size() / (Runtime.getRuntime().availableProcessors() * 4)));
+			ImprovedExplosionTask task = new ImprovedExplosionTask(this, rays, explosion.level, pos, radius, randomVectorLength, mode == Mode.REDUCED_RAYS, minRaysPerTask);
 			editedSections = pool.invoke(task);
 		}
 		rayTracingTime.stopBenchmark();
@@ -86,7 +85,7 @@ public final class ImprovedExplosionThread extends Thread {
 		heapAllocationMB.increment(40 * (fullSections.size() + emptySections.size()) + 16432 * sectionExplosionResistances.size());
 		maxRequiredHeapCache += 40 * (fullSections.size() + emptySections.size()) + 16432 * sectionExplosionResistances.size();
 		heapAllocationMB.increment(heapAllocationCache.get());
-		cpuTaskCount.increment(taskCount);
+		cpuTaskCount.increment(taskCount.get());
 		requiredHeapAllocationMB.increment(maxRequiredHeapCache);
 	}
 
@@ -100,5 +99,11 @@ public final class ImprovedExplosionThread extends Thread {
 	
 	public ExplosionBase getExplosion() {
 		return explosion;
+	}
+	
+	public static enum Mode {
+		DEFAULT,
+		REDUCED_RAYS,
+		DDA
 	}
 }

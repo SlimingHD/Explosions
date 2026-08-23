@@ -8,6 +8,7 @@ import java.util.Set;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import mod.explosion.ImprovedExplosionThread.Mode;
 import mod.explosion.helper.MultithreadedExplosionHandler;
 import mod.explosion.helper.ExplosionProfiler.Counter;
 import mod.explosion.helper.ExplosionProfiler.Profile;
@@ -54,9 +55,10 @@ public class ImprovedExplosionRayReduced extends ExplosionBase {
 	private void explodeMultithreaded() {
 		Profile totalTime = profiler.createProfile("explosions.benchmark.total_time");
 		Profile rayTracingTime = profiler.createProfile("explosions.benchmark.ray_tracing_time");
+		Profile rayCreationTime = profiler.createProfile("explosions.benchmark.ray_creation_time");
 		
 		totalTime.startBenchmark();
-		rayTracingTime.startBenchmark();
+		rayCreationTime.startBenchmark();
 		int minBuildHeight = level.getMinBuildHeight();
 		int maxBuildHeight = level.getMaxBuildHeight() - 1;
 		int minRadiusY = Math.max(-radius, minBuildHeight - pos.getY());
@@ -75,9 +77,11 @@ public class ImprovedExplosionRayReduced extends ExplosionBase {
 				}
 			}
 		}
+		rayCreationTime.stopBenchmark();
 		rayTracingTime.addCounter(rays.size());
-		
-		ImprovedExplosionThread explosionThread = new ImprovedExplosionThread(this, rays, pos, radius, randomVectorLength, true, false);
+
+		rayTracingTime.startBenchmark();
+		ImprovedExplosionThread explosionThread = new ImprovedExplosionThread(this, rays, pos, radius, randomVectorLength, reduction.isRadius() ? Mode.REDUCED_RAYS : Mode.DEFAULT);
 		MultithreadedExplosionHandler.enqueue(explosionThread);
 	}
 	
@@ -87,8 +91,6 @@ public class ImprovedExplosionRayReduced extends ExplosionBase {
 		Counter blockCount = totalTime.addCounter(0);
 		Profile rayTracingTime = profiler.createProfile("explosions.benchmark.ray_tracing_time");
 		Counter rayCount = rayTracingTime.addCounter(0);
-		Profile sectionAccesses = profiler.createProfile("explosions.benchmark.section_accesses");
-		Counter sectionAccessCount = sectionAccesses.addCounter(0);
 		Profile heapAllocations = profiler.createProfile("explosions.benchmark.heap_allocations");
 		Counter heapAllocationMB = heapAllocations.addCounter(0, v -> v / 1048576);
 		Counter requiredHeapAllocationMB = heapAllocations.addCounter(0, v -> v / 1048576);
@@ -181,7 +183,6 @@ public class ImprovedExplosionRayReduced extends ExplosionBase {
 									int chunkY = posY >> 4;
 									int chunkZ = posZ >> 4;
 									LevelChunkSection section = level.getChunk(chunkX, chunkZ).getSection(level.getSectionIndexFromSectionY(chunkY));
-									sectionAccessCount.increment(1);
 									if (section.hasOnlyAir()) {
 										emptySections.add(sectionPos);
 										currentSectionEmpty = true;

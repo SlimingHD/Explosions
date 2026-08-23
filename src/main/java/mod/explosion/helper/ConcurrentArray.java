@@ -2,16 +2,17 @@ package mod.explosion.helper;
 
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 
 public class ConcurrentArray<T> {
 
-	private static final VarHandle HANDLE = MethodHandles.arrayElementVarHandle(Object[].class);
-	private static final Object SETTER = new Object();
+	private static final VarHandle HANDLE = MethodHandles.arrayElementVarHandle(CompletableFuture[].class);
 	
-	private final Object[] array;
+	private final CompletableFuture<?>[] array;
 	
 	public ConcurrentArray(int size) {
-		array = new Object[size];
+		array = new CompletableFuture[size];
 	}
 	
 	public int size() {
@@ -20,23 +21,22 @@ public class ConcurrentArray<T> {
 	
 	@SuppressWarnings("unchecked")
 	public T get(int index) {
-		Object value = HANDLE.getVolatile(array, index);
-		
-		while (value == SETTER) {
-			Thread.onSpinWait();
-			value = HANDLE.getVolatile(array, index);
+		CompletableFuture<?> value = (CompletableFuture<?>)HANDLE.getVolatile(array, index);
+		if (value == null) {
+			return null;
 		}
-		
-		return (T)value;
+		return (T)value.join();
 	}
 	
-	public boolean enterWrite(int index) {
-		return HANDLE.compareAndSet(array, index, null, SETTER);
-	}
-	
-	public T set(int index, T value) {
-		HANDLE.setVolatile(array, index, value);
-		return value;
+	@SuppressWarnings("unchecked")
+	public T trySet(int index, Supplier<T> valueSupplier) {
+		CompletableFuture<T> value = new CompletableFuture<T>();
+		if (HANDLE.compareAndSet(array, index, null, value)) {
+			value.complete(valueSupplier.get());
+			return value.join();
+		}
+		CompletableFuture<?> current = (CompletableFuture<?>)HANDLE.getVolatile(array, index);
+		return current == null ? null : (T)current.join();
 	}
 	
 	public void clear(int index) {

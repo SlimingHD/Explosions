@@ -56,7 +56,7 @@ public class MapUnwrappedExplosion extends ExplosionBase {
 		int rayIndex = 0;
 		int[] currentRays = new int[maxRaysPerTask * 3];
 		Counter rayCounter = rayTracingTime.addCounter(0);
-		MapUnwrappedExplosionThread thread = new MapUnwrappedExplosionThread(this, pos, radius, randomVectorLength);
+		MapUnwrappedExplosionThread thread = new MapUnwrappedExplosionThread(this, pos, radius, randomVectorLength, false);
 		
 		for (int x = -radius; x <= radius; ++x) {
 			for (int y = minRadiusY; y <= maxRadiusY; ++y) {
@@ -186,7 +186,7 @@ public class MapUnwrappedExplosion extends ExplosionBase {
 								travel = nextT - t;
 								t = nextT;
 								remainingLength -= travel;
-								travel = Math.max(0.3f, travel);
+								travel = Math.max(0.1f, travel);
 							}
 							firstIteration = false;
 							

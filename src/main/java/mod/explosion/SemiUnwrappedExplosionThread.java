@@ -3,6 +3,7 @@ package mod.explosion;
 import java.util.BitSet;
 import java.util.List;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
@@ -45,7 +46,7 @@ public class SemiUnwrappedExplosionThread extends Thread {
 	
 	private Int2ObjectMap<BitSet> editedSections;
 	
-	int taskCount = 0;
+	AtomicInteger taskCount = new AtomicInteger();
 	
 	SemiUnwrappedExplosionThread(ExplosionBase explosion, List<int[]> rays, BlockPos pos, int radius, float randomVectorLength) {
 		this.explosion = explosion;
@@ -80,13 +81,13 @@ public class SemiUnwrappedExplosionThread extends Thread {
 		emptySections = new ConcurrentBitSet(arraySize);
 		fullSections = new ConcurrentBitSet(arraySize);
 		
-		heapAllocationMB.increment(arraySize * 12 + arraySize / 4);
-		requiredHeapAllocationMB.increment(arraySize * 12 + arraySize / 4);
+		heapAllocationMB.increment(arraySize * 4 + arraySize / 4);
+		requiredHeapAllocationMB.increment(arraySize * 4 + arraySize / 4);
 	}
 	
 	@Override
 	public void run() {
-		editedSections = pool.invoke(new SemiUnwrappedExplosionTask(this, rays, explosion.level, pos, radius, randomVectorLength, maxReachSection, maxReachSectionY, Math.max(maxRaySetsPerTask, rays.size() / (Runtime.getRuntime().availableProcessors() * 4))));
+		editedSections = pool.invoke(new SemiUnwrappedExplosionTask(this, rays, explosion.level, pos, radius, randomVectorLength, maxReachSection, maxReachSectionY, maxRaySetsPerTask));
 		rayTracingTime.stopBenchmark();
 		long maxRequiredHeapCache = this.maxRequiredHeapCache.get();
 		for (int i = 0; i < fullSections.size(); i++) {
@@ -97,15 +98,13 @@ public class SemiUnwrappedExplosionThread extends Thread {
 		for (BitSet editedBlocks : editedSections.values()) {
 			blockCount.increment(editedBlocks);
 		}
-		heapAllocationMB.increment(fullSections.size() + emptySections.size());
-		maxRequiredHeapCache += fullSections.size() + emptySections.size();
 		for (int i = 0; i < sectionExplosionResistances.size(); i++) {
 			if (sectionExplosionResistances.get(i) != null) {
-				heapAllocationMB.increment(16432);
-				maxRequiredHeapCache += 16432;
+				heapAllocationMB.increment(16482);
+				maxRequiredHeapCache += 16482;
 			}
 		}
-		cpuTaskCount.increment(taskCount);
+		cpuTaskCount.increment(taskCount.get());
 		requiredHeapAllocationMB.increment(maxRequiredHeapCache);
 	}
 

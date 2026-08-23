@@ -1,6 +1,6 @@
 package mod.explosion;
 
-import java.util.concurrent.RecursiveTask;
+import java.util.concurrent.atomic.AtomicLong;
 
 import mod.explosion.helper.ConcurrentBitSet;
 import net.minecraft.core.BlockPos;
@@ -10,7 +10,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 
-public class MapUnwrappedExplosionTask extends RecursiveTask<Void> {
+public class MapUnwrappedExplosionTask implements Runnable {
 	
 	private final MapUnwrappedExplosionThread explosionThread;
 	private final int[] rays;
@@ -32,17 +32,13 @@ public class MapUnwrappedExplosionTask extends RecursiveTask<Void> {
 		this.maxReachSection = maxReachSection;
 		this.maxReachSectionY = maxReachSectionY;
 		this.random = RandomSource.create(0);
-		explosionThread.taskCount++;
-	}
-	
-	public Void compute() {
-		calculate();
-		return null;
+		explosionThread.taskCount.getAndIncrement();
 	}
 	
 	@SuppressWarnings("deprecation")
-	private void calculate() {
-		long heapAllocationCache = 0;
+	@Override
+	public void run() {
+		AtomicLong heapAllocationCache = new AtomicLong();
 		
 		int minBuildHeight = level.getMinBuildHeight();
 		int maxBuildHeight = level.getMaxBuildHeight();
@@ -108,7 +104,7 @@ public class MapUnwrappedExplosionTask extends RecursiveTask<Void> {
 					travel = nextT - t;
 					t = nextT;
 					remainingLength -= travel;
-					travel = Math.max(0.3f, travel);
+					travel = Math.max(0.1f, travel);
 				}
 				firstIteration = false;
 				
@@ -136,39 +132,35 @@ public class MapUnwrappedExplosionTask extends RecursiveTask<Void> {
 						continue;
 					}
 					if (currentExplosionResistances == null) {
-						if (explosionThread.sectionExplosionResistances.enterWrite(sectionIndex)) {
-							int chunkX = posX >> 4;
-							int chunkY = posY >> 4;
-							int chunkZ = posZ >> 4;
+						int chunkX = posX >> 4;
+						int chunkY = posY >> 4;
+						int chunkZ = posZ >> 4;
+						currentExplosionResistances = explosionThread.sectionExplosionResistances.trySet(sectionIndex, () -> {
 							LevelChunkSection section = level.getChunk(chunkX, chunkZ).getSection(level.getSectionIndexFromSectionY(chunkY));
 							if (section.hasOnlyAir()) {
-								explosionThread.emptySections.set(sectionIndex);
-								explosionThread.sectionExplosionResistances.clear(sectionIndex);
-								continue;
+								return null;
 							}
 							float[] explosionResistances = new float[4096];
 							for (int i = 0; i < 4096; ++i) {
 								BlockState state = section.getBlockState(i >> 8, (i >> 4) & 15, i & 15);
 								explosionResistances[i] = state.isAir() ? 0f : (Math.max(state.getBlock().getExplosionResistance(), state.getFluidState().getExplosionResistance()) + 0.3f) * 0.3f;
 							}
-							currentExplosionResistances = explosionThread.sectionExplosionResistances.set(sectionIndex, explosionResistances);
-						} else {
-							currentExplosionResistances = explosionThread.sectionExplosionResistances.get(sectionIndex);
-							if (currentExplosionResistances == null) {
-								continue;
-							}
+							return explosionResistances;
+						});
+						if (currentExplosionResistances == null) {
+							explosionThread.emptySections.set(sectionIndex);
+							explosionThread.sectionExplosionResistances.clear(sectionIndex);
+							continue;
 						}
 					}
 					currentEditedBlocks = explosionThread.editedSections.get(sectionIndex);
 					if (currentEditedBlocks == null) {
-						if (explosionThread.editedSections.enterWrite(sectionIndex)) {
-							currentEditedBlocks = explosionThread.editedSections.set(sectionIndex, new ConcurrentBitSet(4096));
-							heapAllocationCache += 560;
-							long currentRequired = explosionThread.requiredHeapCache.addAndGet(560);
+						currentEditedBlocks = explosionThread.editedSections.trySet(sectionIndex, () -> {
+							heapAllocationCache.getAndAdd(610);
+							long currentRequired = explosionThread.requiredHeapCache.addAndGet(610);
 							explosionThread.maxRequiredHeapCache.accumulateAndGet(currentRequired, Math::max);
-						} else {
-							currentEditedBlocks = explosionThread.editedSections.get(sectionIndex);
-						}
+							return new ConcurrentBitSet(4096);
+						});
 					}
 				}
 				
@@ -176,17 +168,19 @@ public class MapUnwrappedExplosionTask extends RecursiveTask<Void> {
 				if (remainingLength <= 0f) {
 					break;
 				}
-				currentEditedBlocks.set(blockIndex);
-				if (currentEditedBlocks.cardinality() == 4096) {
-					explosionThread.fullSections.set(sectionIndex);
-					explosionThread.editedSections.clear(sectionIndex);
-					currentSectionFull = true;
-					explosionThread.requiredHeapCache.addAndGet(-560);
+				if (!currentEditedBlocks.get(blockIndex)) {
+					currentEditedBlocks.set(blockIndex);
+					if (currentEditedBlocks.cardinality() == 4096) {
+						explosionThread.fullSections.set(sectionIndex);
+						explosionThread.editedSections.clear(sectionIndex);
+						currentSectionFull = true;
+						explosionThread.requiredHeapCache.addAndGet(-610);
+					}
 				}
 				
 				lastSectionIndex = sectionIndex;
 			}
 		}
-		explosionThread.heapAllocationCache.addAndGet(heapAllocationCache);
+		explosionThread.heapAllocationCache.addAndGet(heapAllocationCache.get());
 	}
 }

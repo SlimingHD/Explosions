@@ -37,7 +37,7 @@ public class ExplosionProfiler {
 		return profiles.get(index);
 	}
 	
-	public void printResults() {
+	public String printResults() {
 		MutableComponent message = Component.translatable(titleTranslationKey).append(":").withStyle(ChatFormatting.AQUA);
 		for (Profile profile : profiles) {
 			double time = (profile.stopTime - profile.startTime) / 1000d;
@@ -52,6 +52,7 @@ public class ExplosionProfiler {
 		for (ServerPlayer player : level.players()) {
 			player.sendSystemMessage(message, false);
 		}
+		return message.getString();
 	}
 	
 	public static class Profile {

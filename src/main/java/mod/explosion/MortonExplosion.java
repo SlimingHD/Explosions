@@ -6,9 +6,9 @@ import it.unimi.dsi.fastutil.longs.Long2LongMap;
 import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
 import it.unimi.dsi.fastutil.longs.LongList;
-import mod.explosion.helper.MultithreadedExplosionHandler;
 import mod.explosion.helper.ExplosionProfiler.Counter;
 import mod.explosion.helper.ExplosionProfiler.Profile;
+import mod.explosion.helper.MultithreadedExplosionHandler;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.server.level.ServerLevel;
@@ -31,12 +31,12 @@ public class MortonExplosion extends ExplosionBase {
 		this.multithreaded = multithreaded;
 	}
 	
-	public static int mortonIndex(int x, int y, int z, int bitCount) {
-		int morton = 0;
+	public static long mortonIndex(int x, int y, int z, int bitCount) {
+		long morton = 0;
 		for (int i = 0; i < bitCount; ++i) {
-			morton |= (z & (1 << i)) << (i << 1);
-			morton |= (y & (1 << i)) << ((i << 1) + 1);
-			morton |= (x & (1 << i)) << ((i << 1) + 2);
+			morton |= ((long)z & (1 << i)) << (i << 1);
+			morton |= ((long)y & (1 << i)) << ((i << 1) + 1);
+			morton |= ((long)x & (1 << i)) << ((i << 1) + 2);
 		}
 		return morton;
 	}
@@ -124,8 +124,8 @@ public class MortonExplosion extends ExplosionBase {
 		BitSet emptySections = new BitSet(arraySize);
 		BitSet fullSections = new BitSet(arraySize);
 		BitSet[] editedSections = new BitSet[arraySize];
-		heapAllocationMB.increment(arraySize * 24 + arraySize / 4);
-		requiredHeapAllocationMB.increment(arraySize * 24 + arraySize / 4);
+		heapAllocationMB.increment(arraySize * 8 + arraySize / 4);
+		requiredHeapAllocationMB.increment(arraySize * 8 + arraySize / 4);
 		int minRadiusY = Math.max(-radius, minBuildHeight - pos.getY());
 		int maxRadiusY = Math.min(radius, maxBuildHeight - pos.getY());
 		boolean clippedBottom = minRadiusY > -radius;
@@ -158,7 +158,7 @@ public class MortonExplosion extends ExplosionBase {
 		rayCreationTime.stopBenchmark();
 		rayTracingTime.startBenchmark();
 
-		int mask = 0;
+		long mask = 0;
 		for (int i = 0; i < bitCount; ++i) {
 			mask |= 1 << i;
 		}
@@ -219,7 +219,7 @@ public class MortonExplosion extends ExplosionBase {
 					travel = nextT - t;
 					t = nextT;
 					remainingLength -= travel;
-					travel = Math.max(0.3f, travel);
+					travel = Math.max(0.1f, travel);
 				}
 				firstIteration = false;
 				

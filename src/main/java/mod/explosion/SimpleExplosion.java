@@ -64,7 +64,7 @@ public class SimpleExplosion extends ExplosionBase {
 			}
 		}
 		rayTracingTime.stopBenchmark();
-		requiredHeapAllocationMBs.increment(toExplode.size() * 56);
+		requiredHeapAllocationMBs.increment((long)toExplode.size() * 56);
 		blockCount.increment(toExplode.size());
 		finishExplosion(toExplode);
 	}
@@ -84,7 +84,7 @@ public class SimpleExplosion extends ExplosionBase {
 			}
 		}
 		rayTracingTime.stopBenchmark();
-		requiredHeapAllocationMBs.increment(toExplode.size() * 56);
+		requiredHeapAllocationMBs.increment((long)toExplode.size() * 56);
 		blockCount.increment(toExplode.size());
 		finishExplosion(toExplode);
 	}
@@ -105,7 +105,7 @@ public class SimpleExplosion extends ExplosionBase {
 			}
 		}
 		rayTracingTime.stopBenchmark();
-		requiredHeapAllocationMBs.increment(toExplode.size() * 56);
+		requiredHeapAllocationMBs.increment((long)toExplode.size() * 56);
 		blockCount.increment(toExplode.size());
 		finishExplosion(toExplode);
 	}

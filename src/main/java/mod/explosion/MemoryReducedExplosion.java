@@ -1,9 +1,7 @@
 package mod.explosion;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
-import java.util.List;
 
 import it.unimi.dsi.fastutil.floats.FloatArrayList;
 import it.unimi.dsi.fastutil.floats.FloatList;
@@ -27,6 +25,8 @@ public class MemoryReducedExplosion extends ExplosionBase {
 	private final float randomVectorLength;
 	private final boolean multithreaded;
 	
+	private final short[] indicesCache = new short[4096];
+	
 	public MemoryReducedExplosion(ServerLevel level, BlockPos pos, int radius, float randomVectorLength, boolean multithreaded) {
 		super(level);
 		this.pos = pos;
@@ -49,7 +49,6 @@ public class MemoryReducedExplosion extends ExplosionBase {
 	private void explodeMultithreaded() {
 		Profile totalTime = profiler.createProfile("explosions.benchmark.total_time");
 		Profile rayTracingTime = profiler.createProfile("explosions.benchmark.ray_tracing_time");
-		Counter rayCount = rayTracingTime.addCounter(0);
 		Profile rayCreationTime = profiler.createProfile("explosions.benchmark.ray_creation_time");
 		
 		totalTime.startBenchmark();
@@ -61,9 +60,11 @@ public class MemoryReducedExplosion extends ExplosionBase {
 		int maxRadiusY = Math.min(radius, maxBuildHeight - pos.getY());
 		boolean clippedBottom = minRadiusY > -radius;
 		boolean clippedTop = maxRadiusY < radius;
-		List<int[]> rays = new ArrayList<int[]>();
 		int rayIndex = 0;
 		int[] currentRays = new int[maxRaysPerTask * 3];
+		Counter rayCounter = rayTracingTime.addCounter(0);
+		MapUnwrappedExplosionThread thread = new MapUnwrappedExplosionThread(this, pos, radius, randomVectorLength, true);
+		
 		for (int x = -radius; x <= radius; ++x) {
 			for (int y = minRadiusY; y <= maxRadiusY; ++y) {
 				for (int z = -radius; z <= radius; ++z) {
@@ -71,7 +72,8 @@ public class MemoryReducedExplosion extends ExplosionBase {
 					if ((distanceSqr >= radius * radius && distanceSqr <= (radius + 1) * (radius + 1))
 							|| (((clippedBottom && y == minRadiusY) || (clippedTop && y == maxRadiusY)) && distanceSqr <= (radius + 1) * (radius + 1))) {
 						if (rayIndex == maxRaysPerTask * 3) {
-							rays.add(currentRays);
+							thread.submitRays(currentRays);
+							rayCounter.increment(currentRays.length / 3);
 							currentRays = new int[maxRaysPerTask * 3];
 							rayIndex = 0;
 						}
@@ -84,15 +86,12 @@ public class MemoryReducedExplosion extends ExplosionBase {
 			}
 		}
 		int[] repairedRays = Arrays.copyOf(currentRays, rayIndex);
-		rays.add(repairedRays);
+		thread.submitRays(repairedRays);
 		rayCreationTime.stopBenchmark();
-		for (int[] raySet : rays) {
-			rayCount.increment(raySet.length / 3);
-		}
+		rayCounter.increment(repairedRays.length / 3);
 
 		rayTracingTime.startBenchmark();
-		MemoryReducedExplosionThread thread = new MemoryReducedExplosionThread(this, rays, pos, radius, randomVectorLength);
-		MultithreadedExplosionHandler.enqueueMemoryReduced(thread);
+		MultithreadedExplosionHandler.enqueueMapUnwrapped(thread);
 	}
 
 	@SuppressWarnings("deprecation")
@@ -127,8 +126,8 @@ public class MemoryReducedExplosion extends ExplosionBase {
 		BitSet fullSections = new BitSet(arraySize);
 		BitSet[] editedSections = new BitSet[arraySize];
 		
-		heapAllocationMB.increment(arraySize * 24 + arraySize / 8);
-		requiredHeapAllocationMB.increment(arraySize * 24 + arraySize / 8);
+		heapAllocationMB.increment(arraySize * 8 + arraySize / 8);
+		requiredHeapAllocationMB.increment(arraySize * 8 + arraySize / 8);
 		
 		int centerX = pos.getX() >> 4;
 		int centerY = pos.getY() >> 4;
@@ -198,7 +197,7 @@ public class MemoryReducedExplosion extends ExplosionBase {
 								travel = nextT - t;
 								t = nextT;
 								remainingLength -= travel;
-								travel = Math.max(0.3f, travel);
+								travel = Math.max(0.1f, travel);
 							}
 							firstIteration = false;
 							
@@ -229,21 +228,18 @@ public class MemoryReducedExplosion extends ExplosionBase {
 										continue;
 									}
 									FloatList resistances = new FloatArrayList();
-									short[] indices = new short[4096];
-									//Two 12 byte headers are included here
-									heapAllocationMB.increment(8216);
 									for (int i = 0; i < 4096; ++i) {
 										BlockState state = section.getBlockState(i >> 8, (i >> 4) & 15, i & 15);
 										float resistance = state.isAir() ? 0f : (Math.max(state.getBlock().getExplosionResistance(), state.getFluidState().getExplosionResistance()) + 0.3f) * 0.3f;
 										int resistanceIndex = resistances.indexOf(resistance);
 										if (resistanceIndex != -1) {
-											indices[i] = (short)resistanceIndex;
+											indicesCache[i] = (short)resistanceIndex;
 										} else {
-											indices[i] = (short)resistances.size();
+											indicesCache[i] = (short)resistances.size();
 											resistances.add(resistance);
 										}
 									}
-									currentExplosionResistances = sectionExplosionResistances[sectionIndex] = new PalettedSectionResistances(resistances, indices);
+									currentExplosionResistances = sectionExplosionResistances[sectionIndex] = new PalettedSectionResistances(resistances, indicesCache);
 									averageBitCount.increment(currentExplosionResistances.getBitCount());
 									sectionCount.increment(1);
 								} else if (currentExplosionResistances.isEmpty()) {

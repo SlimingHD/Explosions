@@ -4,21 +4,24 @@ import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import mod.explosion.helper.ConcurrentArray;
 import mod.explosion.helper.ConcurrentBitSet;
 import mod.explosion.helper.ExplosionProfiler.Counter;
 import mod.explosion.helper.ExplosionProfiler.Profile;
+import mod.explosion.helper.PalettedSectionResistances;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.util.Mth;
 
 public class MapUnwrappedExplosionThread extends Thread {
 
-	private static final ForkJoinPool pool = ImprovedExplosionThread.pool;
+	private static final ExecutorService pool = Executors.newCachedThreadPool();
 	
 	private final ExplosionBase explosion;
 	private final BlockPos pos;
@@ -26,8 +29,9 @@ public class MapUnwrappedExplosionThread extends Thread {
 	private final float randomVectorLength;
 	private final int maxReachSection;
 	private final int maxReachSectionY;
+	private final boolean memoryReduced;
 	
-	private final List<Future<Void>> tasks = new ArrayList<Future<Void>>();
+	private final List<Future<?>> tasks = new ArrayList<Future<?>>();
 	
 	public final Profile totalTime;
 	public final Counter blockCount;
@@ -42,17 +46,19 @@ public class MapUnwrappedExplosionThread extends Thread {
 	public final AtomicLong maxRequiredHeapCache = new AtomicLong();
 	
 	public final ConcurrentArray<float[]> sectionExplosionResistances;
+	public final ConcurrentArray<PalettedSectionResistances> memoryReducedSectionExplosionResistances;
 	public final ConcurrentBitSet emptySections;
 	public final ConcurrentBitSet fullSections;
 	public final ConcurrentArray<ConcurrentBitSet> editedSections;
 	
-	int taskCount = 0;
+	AtomicInteger taskCount = new AtomicInteger();
 	
-	MapUnwrappedExplosionThread(ExplosionBase explosion, BlockPos pos, int radius, float randomVectorLength) {
+	MapUnwrappedExplosionThread(ExplosionBase explosion, BlockPos pos, int radius, float randomVectorLength, boolean memoryReduced) {
 		this.explosion = explosion;
 		this.pos = pos;
 		this.radius = radius;
 		this.randomVectorLength = randomVectorLength;
+		this.memoryReduced = memoryReduced;
 		
 		totalTime = explosion.profiler.getProfile(0);
 		blockCount = totalTime.addCounter(0);
@@ -72,24 +78,34 @@ public class MapUnwrappedExplosionThread extends Thread {
 		maxReachSectionY = Mth.ceil(Math.max(maxReachUp / 16f, maxReachDown / 16f)) * 2 + 1;
 		int arraySize = maxReachSection * maxReachSectionY * maxReachSection;
 		
-		sectionExplosionResistances = new ConcurrentArray<float[]>(arraySize);
+		if (memoryReduced) {
+			sectionExplosionResistances = null;
+			memoryReducedSectionExplosionResistances = new ConcurrentArray<PalettedSectionResistances>(arraySize);
+		} else {
+			sectionExplosionResistances = new ConcurrentArray<float[]>(arraySize);
+			memoryReducedSectionExplosionResistances = null;
+		}
 		emptySections = new ConcurrentBitSet(arraySize);
 		fullSections = new ConcurrentBitSet(arraySize);
 		editedSections = new ConcurrentArray<ConcurrentBitSet>(arraySize);
 		
-		heapAllocationMB.increment(arraySize * 24 + arraySize / 4);
-		requiredHeapAllocationMB.increment(arraySize * 24 + arraySize / 4);
+		heapAllocationMB.increment(arraySize * 8 + arraySize / 4);
+		requiredHeapAllocationMB.increment(arraySize * 8 + arraySize / 4);
 	}
 	
 	public void submitRays(int[] rays) {
-		tasks.add(pool.submit(new MapUnwrappedExplosionTask(this, rays, explosion.level, pos, radius, randomVectorLength, maxReachSection, maxReachSectionY)));
+		if (memoryReduced) {
+			tasks.add(pool.submit(new MemoryReducedExplosionTask(this, rays, explosion.level, pos, radius, randomVectorLength, maxReachSection, maxReachSectionY)));
+		} else {
+			tasks.add(pool.submit(new MapUnwrappedExplosionTask(this, rays, explosion.level, pos, radius, randomVectorLength, maxReachSection, maxReachSectionY)));
+		}
 		heapAllocationMB.increment(36 + rays.length * 4);
 		requiredHeapAllocationMB.increment(36 + rays.length * 4);
 	}
 	
 	@Override
 	public void run() {
-		for (Future<Void> task : tasks) {
+		for (Future<?> task : tasks) {
 			try {
 				task.get();
 			} catch (InterruptedException | ExecutionException e) {
@@ -108,15 +124,24 @@ public class MapUnwrappedExplosionThread extends Thread {
 				blockCount.increment(editedSections.get(i).toLegacyBitSet());
 			}
 		}
-		heapAllocationMB.increment(fullSections.size() + emptySections.size());
-		maxRequiredHeapCache += fullSections.size() + emptySections.size();
-		for (int i = 0; i < sectionExplosionResistances.size(); i++) {
-			if (sectionExplosionResistances.get(i) != null) {
-				heapAllocationMB.increment(16432);
-				maxRequiredHeapCache += 16432;
+		if (memoryReduced) {
+			for (int i = 0; i < memoryReducedSectionExplosionResistances.size(); i++) {
+				if (memoryReducedSectionExplosionResistances.get(i) != null) {
+					//50 Bytes estimated CompletableFuture size
+					heapAllocationMB.increment(memoryReducedSectionExplosionResistances.get(i).getByteSize() + 50);
+					maxRequiredHeapCache += memoryReducedSectionExplosionResistances.get(i).getByteSize() + 50;
+				}
+			}
+		} else {
+			for (int i = 0; i < sectionExplosionResistances.size(); i++) {
+				if (sectionExplosionResistances.get(i) != null) {
+					//50 Bytes estimated CompletableFuture size
+					heapAllocationMB.increment(16482);
+					maxRequiredHeapCache += 16482;
+				}
 			}
 		}
-		cpuTaskCount.increment(taskCount);
+		cpuTaskCount.increment(taskCount.get());
 		requiredHeapAllocationMB.increment(maxRequiredHeapCache);
 	}
 

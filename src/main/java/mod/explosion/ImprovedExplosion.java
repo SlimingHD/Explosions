@@ -10,6 +10,7 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import mod.explosion.helper.ExplosionProfiler.Counter;
 import mod.explosion.helper.ExplosionProfiler.Profile;
+import mod.explosion.ImprovedExplosionThread.Mode;
 import mod.explosion.helper.MultithreadedExplosionHandler;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
@@ -48,9 +49,10 @@ public class ImprovedExplosion extends ExplosionBase {
 	private void explodeMultithreaded() {
 		Profile totalTime = profiler.createProfile("explosions.benchmark.total_time");
 		Profile rayTracingTime = profiler.createProfile("explosions.benchmark.ray_tracing_time");
+		Profile rayCreationTime = profiler.createProfile("explosions.benchmark.ray_creation_time");
 		
 		totalTime.startBenchmark();
-		rayTracingTime.startBenchmark();
+		rayCreationTime.startBenchmark();
 		List<Vec3i> rays = new ArrayList<Vec3i>(Mth.ceil(4 * Mth.PI * radius * radius));
 		for (int x = -radius; x <= radius; ++x) {
 			for (int y = -radius; y <= radius; ++y) {
@@ -62,9 +64,11 @@ public class ImprovedExplosion extends ExplosionBase {
 				}
 			}
 		}
+		rayCreationTime.stopBenchmark();
 		rayTracingTime.addCounter(rays.size());
-		
-		ImprovedExplosionThread explosionThread = new ImprovedExplosionThread(this, rays, pos, radius, randomVectorLength, false, false);
+
+		rayTracingTime.startBenchmark();
+		ImprovedExplosionThread explosionThread = new ImprovedExplosionThread(this, rays, pos, radius, randomVectorLength, Mode.DEFAULT);
 		MultithreadedExplosionHandler.enqueue(explosionThread);
 	}
 	

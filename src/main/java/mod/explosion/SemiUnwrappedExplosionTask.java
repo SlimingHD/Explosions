@@ -37,7 +37,7 @@ public class SemiUnwrappedExplosionTask extends RecursiveTask<Int2ObjectMap<BitS
 		this.maxReachSectionY = maxReachSectionY;
 		this.maxTaskSize = maxTaskSize;
 		this.random = RandomSource.create(0);
-		explosionThread.taskCount++;
+		explosionThread.taskCount.getAndIncrement();
 	}
 	
 	public Int2ObjectMap<BitSet> compute() {
@@ -133,7 +133,7 @@ public class SemiUnwrappedExplosionTask extends RecursiveTask<Int2ObjectMap<BitS
 						travel = nextT - t;
 						t = nextT;
 						remainingLength -= travel;
-						travel = Math.max(0.3f, travel);
+						travel = Math.max(0.1f, travel);
 					}
 					firstIteration = false;
 					
@@ -161,27 +161,25 @@ public class SemiUnwrappedExplosionTask extends RecursiveTask<Int2ObjectMap<BitS
 							continue;
 						}
 						if (currentExplosionResistances == null) {
-							if (explosionThread.sectionExplosionResistances.enterWrite(sectionIndex)) {
-								int chunkX = posX >> 4;
-								int chunkY = posY >> 4;
-								int chunkZ = posZ >> 4;
+							int chunkX = posX >> 4;
+							int chunkY = posY >> 4;
+							int chunkZ = posZ >> 4;
+							currentExplosionResistances = explosionThread.sectionExplosionResistances.trySet(sectionIndex, () -> {
 								LevelChunkSection section = level.getChunk(chunkX, chunkZ).getSection(level.getSectionIndexFromSectionY(chunkY));
 								if (section.hasOnlyAir()) {
-									explosionThread.emptySections.set(sectionIndex);
-									explosionThread.sectionExplosionResistances.clear(sectionIndex);
-									continue;
+									return null;
 								}
 								float[] explosionResistances = new float[4096];
 								for (int i = 0; i < 4096; ++i) {
 									BlockState state = section.getBlockState(i >> 8, (i >> 4) & 15, i & 15);
 									explosionResistances[i] = state.isAir() ? 0f : (Math.max(state.getBlock().getExplosionResistance(), state.getFluidState().getExplosionResistance()) + 0.3f) * 0.3f;
 								}
-								currentExplosionResistances = explosionThread.sectionExplosionResistances.set(sectionIndex, explosionResistances);
-							} else {
-								currentExplosionResistances = explosionThread.sectionExplosionResistances.get(sectionIndex);
-								if (currentExplosionResistances == null) {
-									continue;
-								}
+								return explosionResistances;
+							});
+							if (currentExplosionResistances == null) {
+								explosionThread.emptySections.set(sectionIndex);
+								explosionThread.sectionExplosionResistances.clear(sectionIndex);
+								continue;
 							}
 						}
 						currentEditedBlocks = editedSections.get(sectionIndex);
