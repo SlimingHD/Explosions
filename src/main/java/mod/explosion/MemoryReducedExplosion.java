@@ -49,10 +49,9 @@ public class MemoryReducedExplosion extends ExplosionBase {
 	private void explodeMultithreaded() {
 		Profile totalTime = profiler.createProfile("explosions.benchmark.total_time");
 		Profile rayTracingTime = profiler.createProfile("explosions.benchmark.ray_tracing_time");
-		Profile rayCreationTime = profiler.createProfile("explosions.benchmark.ray_creation_time");
 		
 		totalTime.startBenchmark();
-		rayCreationTime.startBenchmark();
+		rayTracingTime.startBenchmark();
 		int maxRaysPerTask = 25000;
 		int minBuildHeight = level.getMinBuildHeight();
 		int maxBuildHeight = level.getMaxBuildHeight();
@@ -87,10 +86,8 @@ public class MemoryReducedExplosion extends ExplosionBase {
 		}
 		int[] repairedRays = Arrays.copyOf(currentRays, rayIndex);
 		thread.submitRays(repairedRays);
-		rayCreationTime.stopBenchmark();
 		rayCounter.increment(repairedRays.length / 3);
 
-		rayTracingTime.startBenchmark();
 		MultithreadedExplosionHandler.enqueueMapUnwrapped(thread);
 	}
 

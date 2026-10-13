@@ -2,7 +2,7 @@
 	"explosions.benchmark.total_time": "Total time for processing %2$s affected voxels: %1$ss",
 	"explosions.benchmark.ray_tracing_time": "Time spent for ray-tracing %2$s rays: %1$ss",
 	"explosions.benchmark.blocks_destroyed": "Total amount of blocks destroyed: %2$s",
-	"explosions.benchmark.heap_allocations": "Estimated heap allocations: %2$sMB, Peak: %3$sMB",
+	"explosions.benchmark.heap_allocations": "Estimated heap allocations: %2$sMiB, Peak: %3$sMiB",
 	"explosions.benchmark.ray_creation_time": "Time for creation of rays: %1$ss",
 	"explosions.benchmark.cpu": "CPU tasks used: %2$s",
 	"explosions.benchmark.precomputation_time": "Time spent for precomputing %2$s sections: %1$ss",

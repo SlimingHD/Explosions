@@ -142,6 +142,7 @@ public class MapUnwrappedExplosionThread extends Thread {
 			}
 		}
 		cpuTaskCount.increment(taskCount.get());
+		heapAllocationMB.increment(heapAllocationCache.get());
 		requiredHeapAllocationMB.increment(maxRequiredHeapCache);
 	}
 

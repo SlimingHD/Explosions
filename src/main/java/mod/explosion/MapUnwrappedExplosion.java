@@ -42,10 +42,9 @@ public class MapUnwrappedExplosion extends ExplosionBase {
 	private void explodeMultithreaded() {
 		Profile totalTime = profiler.createProfile("explosions.benchmark.total_time");
 		Profile rayTracingTime = profiler.createProfile("explosions.benchmark.ray_tracing_time");
-		Profile rayCreationTime = profiler.createProfile("explosions.benchmark.ray_creation_time");
 		
 		totalTime.startBenchmark();
-		rayCreationTime.startBenchmark();
+		rayTracingTime.startBenchmark();
 		int maxRaysPerTask = 25000;
 		int minBuildHeight = level.getMinBuildHeight();
 		int maxBuildHeight = level.getMaxBuildHeight();
@@ -80,10 +79,8 @@ public class MapUnwrappedExplosion extends ExplosionBase {
 		}
 		int[] repairedRays = Arrays.copyOf(currentRays, rayIndex);
 		thread.submitRays(repairedRays);
-		rayCreationTime.stopBenchmark();
 		rayCounter.increment(repairedRays.length / 3);
 
-		rayTracingTime.startBenchmark();
 		MultithreadedExplosionHandler.enqueueMapUnwrapped(thread);
 	}
 	
@@ -116,8 +113,8 @@ public class MapUnwrappedExplosion extends ExplosionBase {
 		BitSet emptySections = new BitSet(arraySize);
 		BitSet fullSections = new BitSet(arraySize);
 		BitSet[] editedSections = new BitSet[arraySize];
-		heapAllocationMB.increment(arraySize * 24 + arraySize / 4);
-		requiredHeapAllocationMB.increment(arraySize * 24 + arraySize / 4);
+		heapAllocationMB.increment(arraySize * 8 + arraySize / 4);
+		requiredHeapAllocationMB.increment(arraySize * 8 + arraySize / 4);
 		int minRadiusY = Math.max(-radius, minBuildHeight - pos.getY());
 		int maxRadiusY = Math.min(radius, maxBuildHeight - pos.getY());
 		boolean clippedBottom = minRadiusY > -radius;

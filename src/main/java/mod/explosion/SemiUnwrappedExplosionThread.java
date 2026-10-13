@@ -105,6 +105,7 @@ public class SemiUnwrappedExplosionThread extends Thread {
 			}
 		}
 		cpuTaskCount.increment(taskCount.get());
+		heapAllocationMB.increment(heapAllocationCache.get());
 		requiredHeapAllocationMB.increment(maxRequiredHeapCache);
 	}
 
