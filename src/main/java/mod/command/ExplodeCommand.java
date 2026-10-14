@@ -160,6 +160,7 @@ public class ExplodeCommand {
 				FileWriter writer = new FileWriter(output);
 				writer.write(EXPERIMENT_RESULT);
 				writer.flush();
+				writer.close();
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
