@@ -53,7 +53,7 @@ public class ExplodeCommand {
 			.then(Commands.argument("pos", BlockPosArgument.blockPos())
 				.then(Commands.argument("type", EnumArgument.enumArgument(ExplosionType.class))
 					.then(Commands.argument("initCount", IntegerArgumentType.integer(1, 5))
-						.then(Commands.argument("testCount", IntegerArgumentType.integer(5, 20))
+						.then(Commands.argument("testCount", IntegerArgumentType.integer(5, 50))
 							.then(Commands.argument("waitTime", IntegerArgumentType.integer(0))
 								.then(Commands.argument("sizeList", EnumArgument.enumArgument(SizeList.class))
 									.executes(ExplodeCommand::performExperiment)
